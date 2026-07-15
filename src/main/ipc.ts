@@ -17,6 +17,7 @@ import { newsService } from './services/news'
 import { modpacksService } from './services/modpacks'
 import { legalService } from './services/legal'
 import { hwidService } from './services/hwid'
+import { updaterService } from './services/updater'
 
 export function registerIpc(): void {
   // Window controls
@@ -152,6 +153,12 @@ export function registerIpc(): void {
   // Legal
   ipcMain.handle(CH.legalStatus, () => legalService.status())
   ipcMain.handle(CH.legalAccept, () => legalService.accept())
+
+  // Updater
+  ipcMain.handle(CH.updaterCheck, () => updaterService.check())
+  ipcMain.handle(CH.updaterDownload, () => updaterService.download())
+  ipcMain.on(CH.updaterInstall, () => updaterService.install())
+  ipcMain.handle(CH.updaterGetState, () => updaterService.getState())
 
   // HWID + app lifecycle
   ipcMain.handle(CH.hwidStatus, () => hwidService.status())

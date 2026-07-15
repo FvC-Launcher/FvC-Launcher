@@ -1,11 +1,15 @@
 {
   "name": "fvc-launcher",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "FvC Launcher — a premium, modern Minecraft launcher with Modrinth integration",
   "main": "./out/main/index.js",
   "author": "FvC",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FvC-Launcher/FvC-Launcher.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -14,10 +18,13 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:linux": "electron-vite build && electron-builder --linux"
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "release:win": "electron-vite build && electron-builder --win --publish always",
+    "release:linux": "electron-vite build && electron-builder --linux --publish always"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
+    "electron-updater": "^6.8.9",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5"
   },

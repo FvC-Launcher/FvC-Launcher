@@ -339,3 +339,27 @@ export interface LegalStatus {
   eulaVersion: string
   privacyVersion: string
 }
+
+// ----------------------------------- Updater -------------------------------
+
+export type UpdaterStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'dev'
+
+export interface UpdaterState {
+  status: UpdaterStatus
+  /** Version offered/downloaded (e.g. "1.2.0"). */
+  version?: string
+  /** Release notes (markdown from the GitHub release body). */
+  notes?: string
+  /** Download progress 0..100. */
+  percent?: number
+  /** Bytes per second while downloading. */
+  speedBps?: number
+  error?: string
+}

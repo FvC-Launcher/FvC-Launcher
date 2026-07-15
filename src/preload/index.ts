@@ -111,6 +111,13 @@ const api: FvcApi = {
     relaunch: () => ipcRenderer.send(CH.appRelaunch),
     exit: () => ipcRenderer.send(CH.appExit)
   },
+  updater: {
+    check: () => ipcRenderer.invoke(CH.updaterCheck),
+    download: () => ipcRenderer.invoke(CH.updaterDownload),
+    install: () => ipcRenderer.send(CH.updaterInstall),
+    getState: () => ipcRenderer.invoke(CH.updaterGetState),
+    onState: (cb) => subscribe(CH.updaterState, cb)
+  },
   onNotification: (cb) => subscribe(CH.notify, cb),
   onProfilesChanged: (cb) => subscribe(CH.profilesChanged, cb),
   onAccountsChanged: (cb) => subscribe(CH.accountsChanged, cb)

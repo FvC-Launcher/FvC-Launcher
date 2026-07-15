@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, FileText, Play, ShieldCheck } from 'lucide-react'
+import { ArrowRight, FileText, ShieldCheck } from 'lucide-react'
 import { Toggle } from '@/components/ui'
 import { LegalViewer, type LegalDoc } from '@/components/LegalViewer'
 import { useApp } from '@/store'
+import logo from '@/assets/icon.png'
 
 /**
  * Mandatory first-launch dialog: the launcher is unusable until both the
@@ -32,19 +33,11 @@ export function FirstRunGate(): ReactNode {
       >
         <div className="modal-body" style={{ padding: '30px 30px 24px', gap: 20 }}>
           <div className="stack" style={{ alignItems: 'center', gap: 12, textAlign: 'center' }}>
-            <span
-              style={{
-                width: 58,
-                height: 58,
-                borderRadius: 16,
-                background: 'linear-gradient(135deg, var(--accent), #7b5bff)',
-                display: 'grid',
-                placeItems: 'center',
-                boxShadow: 'var(--glow)'
-              }}
-            >
-              <Play size={26} fill="#081018" strokeWidth={0} />
-            </span>
+            <img
+              src={logo}
+              alt=""
+              style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'contain' }}
+            />
             <h1 style={{ fontSize: '1.45rem' }}>Welcome to FvC Launcher</h1>
             <p className="muted" style={{ fontSize: '0.9rem', lineHeight: 1.55, maxWidth: 420 }}>
               Before using FvC Launcher, please review and accept our End User License Agreement

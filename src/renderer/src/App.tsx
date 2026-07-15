@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ModDetailsModal } from '@/components/ModDetailsModal'
 import { FirstRunGate } from '@/components/FirstRunGate'
 import { HwidScreen } from '@/components/HwidScreen'
+import { UpdateModal } from '@/components/UpdateModal'
 import { HomePage } from '@/pages/HomePage'
 import { PlayPage } from '@/pages/PlayPage'
 import { ProfilesPage } from '@/pages/ProfilesPage'
@@ -89,6 +90,7 @@ export default function App(): ReactNode {
       </main>
       <NotificationHost />
       <ModDetailsModal />
+      <UpdateModal />
       {boot === 'legal' && <FirstRunGate />}
     </div>
   )

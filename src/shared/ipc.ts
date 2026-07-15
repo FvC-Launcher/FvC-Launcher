@@ -23,7 +23,8 @@ import type {
   ModrinthVersion,
   NewsItem,
   NotificationPayload,
-  Profile
+  Profile,
+  UpdaterState
 } from './types'
 
 export interface ModrinthSearchParams {
@@ -162,6 +163,16 @@ export interface FvcApi {
     relaunch(): void
     exit(): void
   }
+  updater: {
+    /** Manual check; state events carry the outcome. */
+    check(): Promise<void>
+    /** User consented — start downloading the offered update. */
+    download(): Promise<void>
+    /** Quit and install the downloaded update now. */
+    install(): void
+    getState(): Promise<UpdaterState>
+    onState(cb: (state: UpdaterState) => void): () => void
+  }
   onNotification(cb: (n: NotificationPayload) => void): () => void
   onProfilesChanged(cb: () => void): () => void
   onAccountsChanged(cb: () => void): () => void
@@ -254,6 +265,12 @@ export const CH = {
   hwidFixProgress: 'hwid:fixProgress',
   appRelaunch: 'app:relaunch',
   appExit: 'app:exit',
+
+  updaterCheck: 'updater:check',
+  updaterDownload: 'updater:download',
+  updaterInstall: 'updater:install',
+  updaterGetState: 'updater:getState',
+  updaterState: 'updater:state',
 
   notify: 'app:notify'
 } as const

@@ -1,0 +1,43 @@
+# Builds Windows + Linux installers and publishes them (with the updater
+# metadata files) to a GitHub Release whenever a v* tag is pushed.
+#
+# Usage:
+#   1. Bump "version" in package.json (e.g. 1.2.0)
+#   2. git commit -am "v1.2.0" && git tag v1.2.0 && git push && git push --tags
+#   3. This workflow creates the release; installed launchers then offer the update.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # electron-builder uploads release assets with GITHUB_TOKEN
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build and publish
+        run: npx electron-vite build && npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,6 +7,7 @@ import { registerIpc } from './ipc'
 import { broadcast } from './broadcast'
 import { hwidService } from './services/hwid'
 import { accountsService } from './services/accounts'
+import { updaterService } from './services/updater'
 import { CH } from '@shared/ipc'
 
 interface WindowState {
@@ -136,6 +137,8 @@ if (!gotLock) {
     if (hwidStatus === 'valid') {
       // Keep Microsoft sessions fresh without blocking startup.
       setTimeout(() => accountsService.refreshAllInBackground(), 2500)
+      // Check GitHub Releases for launcher updates (packaged builds only).
+      updaterService.init()
     }
 
     app.on('activate', () => {

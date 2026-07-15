@@ -2,6 +2,13 @@ appId: com.fvc.launcher
 productName: FvC Launcher
 copyright: Copyright © 2026 FvC
 
+# Auto-updates: electron-updater reads this to find releases, and it is baked
+# into the packaged app as app-update.yml.
+publish:
+  provider: github
+  owner: FvC-Launcher
+  repo: FvC-Launcher
+
 directories:
   buildResources: build
   output: dist

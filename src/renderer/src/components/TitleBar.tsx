@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Copy, Minus, Play, Square, X } from 'lucide-react'
+import { Copy, Minus, Square, X } from 'lucide-react'
+import logo from '@/assets/icon.png'
 
 export function TitleBar(): ReactNode {
   const [maximized, setMaximized] = useState(false)
@@ -12,9 +13,7 @@ export function TitleBar(): ReactNode {
   return (
     <header className="titlebar">
       <div className="brand">
-        <span className="logo">
-          <Play fill="currentColor" strokeWidth={0} />
-        </span>
+        <img className="logo" src={logo} alt="" />
         FvC Launcher
       </div>
       <div className="win-controls">

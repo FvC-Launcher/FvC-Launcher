@@ -50,6 +50,40 @@ npm run dist:linux   # Linux AppImage + deb → dist/
 The app icon lives in `build/icon.png` (installer artwork, converted per-platform by
 electron-builder) and `resources/icon.png` (window/taskbar icon).
 
+## Releasing an update (auto-update via GitHub Releases)
+
+Installed launchers check `github.com/FvC-Launcher/FvC-Launcher` releases on startup and
+show a consent popup — updates are never installed silently. Publishing a new version:
+
+**Recommended — CI (builds Windows + Linux automatically):**
+
+1. Bump `version` in `package.json` (semver: bugfix → patch `1.1.1`, features → minor
+   `1.2.0`, breaking → major `2.0.0`).
+2. ```bash
+   git commit -am "v1.2.0"
+   git tag v1.2.0          # tag MUST be v + the package.json version
+   git push && git push --tags
+   ```
+3. The `Release` workflow builds both platforms and uploads everything to a GitHub
+   Release. Once it finishes (and the release is published, not draft), users get the
+   update popup.
+
+**Manual (single platform from your machine):**
+
+```bash
+# needs a GitHub token with repo write access:
+$env:GH_TOKEN = "ghp_…"       # PowerShell
+npm run release:win           # or release:linux (run on Linux)
+```
+
+**If uploading assets by hand**, a release for tag `vX.Y.Z` must contain:
+
+- Windows: `FvC-Launcher-Setup-X.Y.Z.exe`, `FvC-Launcher-Setup-X.Y.Z.exe.blockmap`, `latest.yml`
+- Linux: `FvC-Launcher-X.Y.Z.AppImage`, `FvC-Launcher-X.Y.Z.deb`, `latest-linux.yml`
+
+The `latest*.yml` files are what installed apps poll — without them updates are never
+detected. End users need no token (the repo is public); tokens are only for publishing.
+
 ## Architecture
 
 - `src/main` — Electron main process: window/state, settings, accounts (msmc + safeStorage),
