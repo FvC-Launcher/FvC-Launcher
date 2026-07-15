@@ -1,0 +1,46 @@
+appId: com.fvc.launcher
+productName: FvC Launcher
+copyright: Copyright © 2026 FvC
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**
+  - resources/**
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!scripts/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
+asarUnpack:
+  - resources/**
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: FvC Launcher
+  artifactName: FvC-Launcher-Setup-${version}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Game
+  maintainer: FvC
+  artifactName: FvC-Launcher-${version}.${ext}
+
+npmRebuild: false
