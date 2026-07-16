@@ -341,6 +341,19 @@ export function SettingsPage(): ReactNode {
             <SettingRow label="Auto-update mods" description="Check installed mods for updates when opening a profile">
               <Toggle checked={settings.autoUpdateMods} onChange={(v) => set({ autoUpdateMods: v })} />
             </SettingRow>
+            <SettingRow
+              label="CurseForge API key"
+              description="Free key from console.curseforge.com — enables CurseForge modpack search and reliable pack downloads"
+            >
+              <input
+                className="input"
+                style={{ width: 320 }}
+                type="password"
+                placeholder="Paste your API key…"
+                defaultValue={settings.curseforgeApiKey}
+                onBlur={(e) => set({ curseforgeApiKey: e.target.value.trim() })}
+              />
+            </SettingRow>
           </div>
         )}
 

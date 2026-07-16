@@ -7,6 +7,7 @@ import type {
   Account,
   AppSettings,
   ContentKind,
+  CurseForgePack,
   DownloadTask,
   HwidFixResult,
   HwidStatus,
@@ -44,6 +45,27 @@ export interface ModpackInstallInput {
   ramMb: number
   projectId: string
   versionId: string
+}
+
+export interface CurseForgeSearchParams {
+  query: string
+  gameVersion?: string
+  loader?: string
+  sort?: 'popularity' | 'downloads' | 'updated' | 'featured' | 'name'
+}
+
+export interface CurseForgeInstallInput {
+  name: string
+  icon?: string
+  ramMb: number
+  modId: number
+}
+
+export interface CurseForgeZipInstallInput {
+  name: string
+  icon?: string
+  ramMb: number
+  zipPath: string
 }
 
 export interface CreateProfileInput {
@@ -152,6 +174,15 @@ export interface FvcApi {
     install(input: ModpackInstallInput): Promise<Profile>
     onProgress(cb: (p: ModpackProgress) => void): () => void
   }
+  curseforge: {
+    /** Requires an API key in Settings; rejects with a friendly error otherwise. */
+    searchPacks(params: CurseForgeSearchParams): Promise<CurseForgePack[]>
+    install(input: CurseForgeInstallInput): Promise<Profile>
+    /** Open a file picker for a CurseForge modpack .zip; null if cancelled. */
+    pickZip(): Promise<string | null>
+    installZip(input: CurseForgeZipInstallInput): Promise<Profile>
+    hasApiKey(): Promise<boolean>
+  }
   legal: {
     status(): Promise<LegalStatus>
     accept(): Promise<void>
@@ -256,6 +287,12 @@ export const CH = {
 
   modpackInstall: 'modpacks:install',
   modpackProgress: 'modpacks:progress',
+
+  cfSearch: 'curseforge:search',
+  cfInstall: 'curseforge:install',
+  cfPickZip: 'curseforge:pickZip',
+  cfInstallZip: 'curseforge:installZip',
+  cfHasKey: 'curseforge:hasKey',
 
   legalStatus: 'legal:status',
   legalAccept: 'legal:accept',

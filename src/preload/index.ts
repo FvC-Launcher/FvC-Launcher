@@ -100,6 +100,13 @@ const api: FvcApi = {
     install: (input) => ipcRenderer.invoke(CH.modpackInstall, input),
     onProgress: (cb) => subscribe(CH.modpackProgress, cb)
   },
+  curseforge: {
+    searchPacks: (params) => ipcRenderer.invoke(CH.cfSearch, params),
+    install: (input) => ipcRenderer.invoke(CH.cfInstall, input),
+    pickZip: () => ipcRenderer.invoke(CH.cfPickZip),
+    installZip: (input) => ipcRenderer.invoke(CH.cfInstallZip, input),
+    hasApiKey: () => ipcRenderer.invoke(CH.cfHasKey)
+  },
   legal: {
     status: () => ipcRenderer.invoke(CH.legalStatus),
     accept: () => ipcRenderer.invoke(CH.legalAccept)

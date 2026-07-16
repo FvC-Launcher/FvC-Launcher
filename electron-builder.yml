@@ -8,6 +8,9 @@ publish:
   provider: github
   owner: FvC-Launcher
   repo: FvC-Launcher
+  # Publish as a real release immediately — the default (draft) leaves the
+  # assets invisible to installed apps until someone publishes it by hand.
+  releaseType: release
 
 directories:
   buildResources: build

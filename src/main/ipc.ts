@@ -15,6 +15,7 @@ import { launchService } from './services/launch'
 import { downloadsService } from './services/downloads'
 import { newsService } from './services/news'
 import { modpacksService } from './services/modpacks'
+import { curseforgeService } from './services/curseforge'
 import { legalService } from './services/legal'
 import { hwidService } from './services/hwid'
 import { updaterService } from './services/updater'
@@ -149,6 +150,13 @@ export function registerIpc(): void {
 
   // Modpacks
   ipcMain.handle(CH.modpackInstall, (_e, input) => modpacksService.install(input))
+
+  // CurseForge
+  ipcMain.handle(CH.cfSearch, (_e, params) => curseforgeService.searchPacks(params))
+  ipcMain.handle(CH.cfInstall, (_e, input) => curseforgeService.install(input))
+  ipcMain.handle(CH.cfPickZip, () => curseforgeService.pickZip())
+  ipcMain.handle(CH.cfInstallZip, (_e, input) => curseforgeService.installZip(input))
+  ipcMain.handle(CH.cfHasKey, () => curseforgeService.hasApiKey())
 
   // Legal
   ipcMain.handle(CH.legalStatus, () => legalService.status())

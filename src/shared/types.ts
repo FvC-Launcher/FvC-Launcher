@@ -220,6 +220,8 @@ export interface AppSettings {
   concurrentDownloads: number
   speedLimitMbps: number // 0 = unlimited
   autoUpdateMods: boolean
+  /** Optional key from console.curseforge.com enabling CurseForge search. */
+  curseforgeApiKey: string
   // Advanced
   debugLogging: boolean
   developerMode: boolean
@@ -249,6 +251,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   concurrentDownloads: 4,
   speedLimitMbps: 0,
   autoUpdateMods: false,
+  curseforgeApiKey: '',
   debugLogging: false,
   developerMode: false
 }
@@ -321,6 +324,20 @@ export interface ModpackProgress {
   detail: string
   /** 0..1, -1 indeterminate */
   progress: number
+}
+
+/** A CurseForge modpack search hit, mapped to a launcher-friendly shape. */
+export interface CurseForgePack {
+  id: number
+  name: string
+  summary: string
+  author: string
+  logoUrl: string | null
+  downloads: number
+  dateModified: string
+  gameVersions: string[]
+  categories: string[]
+  websiteUrl: string | null
 }
 
 // ----------------------------------- HWID ----------------------------------

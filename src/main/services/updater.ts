@@ -75,13 +75,16 @@ function wireEvents(): void {
   })
 
   autoUpdater.on('error', (err) => {
-    const message = err instanceof Error ? err.message : String(err)
+    const raw = err instanceof Error ? err.message : String(err)
+    // electron-updater errors embed whole HTTP responses — keep the first
+    // meaningful line so notifications stay readable.
+    const message = (raw.split('\n')[0] ?? raw).slice(0, 200)
     setState({ status: 'error', error: message })
     if (manualCheck) {
       notify({ type: 'error', title: 'Update check failed', body: message })
     }
     manualCheck = false
-    console.error('[updater]', message)
+    console.error('[updater]', raw)
   })
 }
 
