@@ -13,9 +13,10 @@ const ICONS = {
 export function NotificationHost(): ReactNode {
   const notifications = useApp((s) => s.notifications)
   const dismiss = useApp((s) => s.dismissNotification)
+  const position = useApp((s) => s.settings.notificationPosition)
 
   return (
-    <div className="notifications">
+    <div className={`notifications ${position === 'bottom-right' ? 'bottom' : ''}`}>
       <AnimatePresence>
         {notifications.map((n) => {
           const { icon: Icon, color } = ICONS[n.type]

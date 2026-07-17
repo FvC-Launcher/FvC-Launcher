@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { Button, ConfirmDialog, Select, SettingRow, Slider, Tabs, Toggle } from '@/components/ui'
 import { useApp } from '@/store'
+import { THEMES } from '@/themes'
 import type { JavaInstall } from '@shared/types'
 
 const ACCENT_PRESETS = ['#3BCBFF', '#7B5BFF', '#34D399', '#FBBF24', '#F87171', '#FF7AC6']
@@ -237,6 +238,44 @@ export function SettingsPage(): ReactNode {
 
         {section === 'appearance' && (
           <div className="card">
+            <SettingRow label="Theme" description="Complete color scheme for the whole launcher">
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {THEMES.map((theme) => (
+                  <button
+                    key={theme.id}
+                    onClick={() => set({ theme: theme.id })}
+                    title={theme.label}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 46,
+                        height: 30,
+                        borderRadius: 8,
+                        background: `linear-gradient(135deg, ${theme.vars['--bg']} 45%, ${theme.vars['--card-hover']} 45% 75%, ${theme.vars['--text-2']} 75%)`,
+                        outline:
+                          settings.theme === theme.id
+                            ? '2px solid var(--accent)'
+                            : '1px solid var(--line-strong)',
+                        outlineOffset: 2
+                      }}
+                    />
+                    <span
+                      className="tiny"
+                      style={settings.theme === theme.id ? { color: 'var(--accent)', fontWeight: 700 } : undefined}
+                    >
+                      {theme.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
             <SettingRow label="Accent color">
               <div className="row" style={{ gap: 8 }}>
                 {ACCENT_PRESETS.map((color) => (
@@ -261,6 +300,52 @@ export function SettingsPage(): ReactNode {
                   style={{ width: 34, height: 26, border: 'none', background: 'none', cursor: 'pointer' }}
                 />
               </div>
+            </SettingRow>
+            <SettingRow
+              label="Secondary accent"
+              description="Second color of gradients (Play button, progress bars)"
+            >
+              <div className="row" style={{ gap: 8 }}>
+                <span
+                  style={{
+                    width: 90,
+                    height: 26,
+                    borderRadius: 8,
+                    background: `linear-gradient(90deg, ${settings.accentColor}, ${settings.accentColor2})`
+                  }}
+                />
+                <input
+                  type="color"
+                  value={settings.accentColor2}
+                  onChange={(e) => set({ accentColor2: e.target.value })}
+                  style={{ width: 34, height: 26, border: 'none', background: 'none', cursor: 'pointer' }}
+                />
+              </div>
+            </SettingRow>
+            <SettingRow label="UI scale" description="Size of text and controls across the launcher">
+              <div style={{ width: 260 }}>
+                <Slider
+                  min={0.85}
+                  max={1.2}
+                  step={0.05}
+                  value={settings.uiScale}
+                  onChange={(v) => set({ uiScale: v })}
+                  format={(v) => `${Math.round(v * 100)}%`}
+                />
+              </div>
+            </SettingRow>
+            <SettingRow label="Icon-only sidebar" description="Collapse the sidebar to a slim icon rail">
+              <Toggle checked={settings.sidebarIconsOnly} onChange={(v) => set({ sidebarIconsOnly: v })} />
+            </SettingRow>
+            <SettingRow label="Notification position">
+              <Select
+                value={settings.notificationPosition}
+                options={[
+                  { value: 'top-right', label: 'Top right' },
+                  { value: 'bottom-right', label: 'Bottom right' }
+                ]}
+                onChange={(v) => set({ notificationPosition: v as never })}
+              />
             </SettingRow>
             <SettingRow label="Corner radius">
               <div style={{ width: 260 }}>

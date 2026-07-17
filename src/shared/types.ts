@@ -209,11 +209,20 @@ export interface AppSettings {
   /** auto = launcher picks/downloads the right Java per Minecraft version. */
   javaMode: 'auto' | 'manual'
   // Appearance
+  /** Theme preset id (see renderer themes.ts). */
+  theme: string
   accentColor: string
+  /** Second color of accent gradients (progress bar, play button). */
+  accentColor2: string
   blurIntensity: number
   animationSpeed: number
   cornerRadius: number
   compactMode: boolean
+  /** Root UI scale multiplier (0.85–1.2). */
+  uiScale: number
+  /** Collapse the sidebar to icons only. */
+  sidebarIconsOnly: boolean
+  notificationPosition: 'top-right' | 'bottom-right'
   backgroundImage: string
   backgroundOpacity: number
   // Downloads
@@ -241,11 +250,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showConsoleOnLaunch: false,
   askAccountOnPlay: true,
   javaMode: 'auto',
+  theme: 'fvc-dark',
   accentColor: '#3BCBFF',
+  accentColor2: '#7B5BFF',
   blurIntensity: 12,
   animationSpeed: 1,
   cornerRadius: 12,
   compactMode: false,
+  uiScale: 1,
+  sidebarIconsOnly: false,
+  notificationPosition: 'top-right',
   backgroundImage: '',
   backgroundOpacity: 0.35,
   concurrentDownloads: 4,

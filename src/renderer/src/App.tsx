@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { hexToRgb, useApp } from '@/store'
+import { themeById } from '@/themes'
 import { TitleBar } from '@/components/TitleBar'
 import { Sidebar } from '@/components/Sidebar'
 import { NotificationHost } from '@/components/NotificationHost'
@@ -44,12 +45,20 @@ export default function App(): ReactNode {
   // Apply user-tunable appearance settings as CSS variables.
   useEffect(() => {
     const root = document.documentElement
+    // Theme preset first, then the user's own tweaks on top.
+    for (const [key, value] of Object.entries(themeById(settings.theme).vars)) {
+      root.style.setProperty(key, value)
+    }
     root.style.setProperty('--accent', settings.accentColor)
+    root.style.setProperty('--accent-2', settings.accentColor2)
     root.style.setProperty('--accent-rgb', hexToRgb(settings.accentColor))
     root.style.setProperty('--radius', `${settings.cornerRadius}px`)
     root.style.setProperty('--blur', String(settings.blurIntensity))
     root.style.setProperty('--speed', String(Math.max(0.25, settings.animationSpeed)))
+    root.style.fontSize = `${(settings.compactMode ? 13.5 : 15) * Math.min(1.2, Math.max(0.85, settings.uiScale))}px`
     root.classList.toggle('compact', settings.compactMode)
+    root.classList.toggle('sidebar-mini', settings.sidebarIconsOnly)
+    root.classList.toggle('theme-light', settings.theme === 'light')
   }, [settings])
 
   const PageComponent = PAGES[page]

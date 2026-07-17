@@ -44,7 +44,7 @@ function NavButton({
   )
 
   return (
-    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => navigate(page)}>
+    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => navigate(page)} title={label}>
       {active && (
         <>
           <motion.span
@@ -60,10 +60,10 @@ function NavButton({
         </>
       )}
       <Icon />
-      {label}
+      <span className="nav-label">{label}</span>
       {downloadsBadge && (
         <span
-          className="spinner"
+          className="spinner nav-spinner"
           style={{ width: 13, height: 13, marginLeft: 'auto', color: 'var(--accent)' }}
         />
       )}

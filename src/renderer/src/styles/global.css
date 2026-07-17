@@ -3,7 +3,7 @@
    ========================================================================== */
 
 :root {
-  /* Palette */
+  /* Palette (overridden by theme presets in themes.ts) */
   --bg: #0f1115;
   --bg-2: #171a21;
   --card: #1c2029;
@@ -11,7 +11,19 @@
   --text: #ffffff;
   --text-2: #aeb7c2;
   --text-3: #6d7683;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --hover: rgba(255, 255, 255, 0.06);
+  --hover-strong: rgba(255, 255, 255, 0.11);
+  --control-bg: #2b323e;
+  --scroll-thumb: #2c3340;
+  --scroll-thumb-hover: #3a4353;
+  --titlebar-bg: rgba(23, 26, 33, 0.65);
+  --sidebar-bg: rgba(23, 26, 33, 0.55);
+  --notification-bg: rgba(28, 32, 41, 0.92);
+  --on-accent: #06131a;
   --accent: #3bcbff;
+  --accent-2: #7b5bff;
   --accent-rgb: 59, 203, 255;
   --success: #34d399;
   --error: #f87171;
@@ -42,6 +54,35 @@
 .compact {
   --sidebar-w: 200px;
   font-size: 13.5px;
+}
+
+/* Icon-only sidebar (Settings → Appearance) */
+.sidebar-mini {
+  --sidebar-w: 70px;
+}
+.sidebar-mini .sidebar {
+  padding: 18px 10px;
+  align-items: center;
+}
+.sidebar-mini .nav-item {
+  justify-content: center;
+  padding: 12px 0;
+  gap: 0;
+}
+.sidebar-mini .nav-item:hover {
+  transform: none;
+}
+.sidebar-mini .nav-label,
+.sidebar-mini .section-label,
+.sidebar-mini .nav-spinner {
+  display: none;
+}
+
+/* Softer shadows on the light theme — heavy black glows look muddy there. */
+.theme-light {
+  --shadow-sm: 0 1px 4px rgba(23, 30, 45, 0.1);
+  --shadow: 0 6px 20px rgba(23, 30, 45, 0.14);
+  --shadow-lg: 0 14px 40px rgba(23, 30, 45, 0.2);
 }
 
 * {
@@ -83,12 +124,12 @@ img {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2c3340;
+  background: var(--scroll-thumb);
   border-radius: 99px;
   border: 3px solid var(--bg);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4353;
+  background: var(--scroll-thumb-hover);
 }
 
 /* Typography helpers */
@@ -222,9 +263,9 @@ textarea {
   display: flex;
   align-items: center;
   -webkit-app-region: drag;
-  background: rgba(23, 26, 33, 0.65);
+  background: var(--titlebar-bg);
   backdrop-filter: blur(calc(var(--blur) * 1px));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--line);
 }
 
 .titlebar .brand {
@@ -258,7 +299,7 @@ textarea {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .titlebar .win-controls button:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--hover);
   color: var(--text);
 }
 .titlebar .win-controls button.close:hover {
@@ -276,9 +317,9 @@ textarea {
   flex-direction: column;
   gap: 4px;
   padding: 18px 12px;
-  background: rgba(23, 26, 33, 0.55);
+  background: var(--sidebar-bg);
   backdrop-filter: blur(calc(var(--blur) * 1px));
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-right: 1px solid var(--line);
   overflow-y: auto;
 }
 
@@ -301,7 +342,7 @@ textarea {
 }
 .nav-item:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
   transform: translateX(2px);
 }
 .nav-item.active {
@@ -395,18 +436,18 @@ textarea {
 
 .btn-primary {
   background: var(--accent);
-  color: #06131a;
+  color: var(--on-accent);
 }
 .btn-primary:hover:not(:disabled) {
   box-shadow: var(--glow);
   filter: brightness(1.08);
 }
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   color: var(--text);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.11);
+  background: var(--hover-strong);
 }
 .btn-outline {
   background: transparent;
@@ -422,7 +463,7 @@ textarea {
   color: var(--text-2);
 }
 .btn-subtle:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   color: var(--text);
 }
 .btn-danger {
@@ -440,7 +481,7 @@ textarea {
 .select-trigger {
   width: 100%;
   background: var(--bg-2);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 10px 13px;
@@ -480,7 +521,7 @@ textarea {
   text-align: left;
 }
 .select-trigger:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--line-strong);
 }
 .select-menu {
   position: absolute;
@@ -490,7 +531,7 @@ textarea {
   max-height: 280px;
   overflow-y: auto;
   background: var(--card);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   z-index: 60;
@@ -523,7 +564,7 @@ textarea {
   width: 42px;
   height: 24px;
   border-radius: 99px;
-  background: #2b323e;
+  background: var(--control-bg);
   transition: background var(--dur-fast) var(--ease);
   flex-shrink: 0;
 }
@@ -556,8 +597,8 @@ textarea {
     to right,
     var(--accent) 0%,
     var(--accent) var(--slider-fill, 50%),
-    #2b323e var(--slider-fill, 50%),
-    #2b323e 100%
+    var(--control-bg) var(--slider-fill, 50%),
+    var(--control-bg) 100%
   );
   cursor: pointer;
 }
@@ -578,13 +619,13 @@ textarea {
 .progress {
   height: 7px;
   border-radius: 99px;
-  background: #2b323e;
+  background: var(--control-bg);
   overflow: hidden;
 }
 .progress > div {
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, var(--accent), #7b5bff);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
   transition: width 0.2s linear;
 }
 .progress.indeterminate > div {
@@ -624,7 +665,7 @@ textarea {
   border-radius: 99px;
   font-size: 0.72rem;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--hover);
   color: var(--text-2);
 }
 .badge.accent {
@@ -657,7 +698,7 @@ textarea {
 }
 .modal {
   background: var(--bg-2);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 100%;
@@ -702,15 +743,20 @@ textarea {
   width: 340px;
   pointer-events: none;
 }
+.notifications.bottom {
+  top: auto;
+  bottom: 16px;
+  flex-direction: column-reverse;
+}
 .notification {
   pointer-events: all;
   display: flex;
   gap: 12px;
   padding: 13px 15px;
   border-radius: var(--radius);
-  background: rgba(28, 32, 41, 0.92);
+  background: var(--notification-bg);
   backdrop-filter: blur(calc(var(--blur) * 1px));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
   cursor: pointer;
 }
@@ -806,7 +852,7 @@ textarea {
   z-index: 300;
   min-width: 190px;
   background: var(--card);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   padding: 5px;
@@ -838,7 +884,7 @@ textarea {
 }
 .context-menu .divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--line);
   margin: 4px 8px;
 }
 
@@ -866,8 +912,8 @@ textarea {
   font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.01em;
-  color: #06131a;
-  background: linear-gradient(135deg, var(--accent), #57e0ff);
+  color: var(--on-accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   box-shadow: 0 8px 32px rgba(var(--accent-rgb), 0.35);
   transition:
     transform var(--dur-fast) var(--ease),
@@ -962,7 +1008,7 @@ textarea {
   padding: 15px 18px;
 }
 .setting-row + .setting-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--line);
 }
 .setting-row .s-label {
   font-weight: 600;
