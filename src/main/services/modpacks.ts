@@ -96,7 +96,8 @@ export const modpacksService = {
         loader,
         loaderVersion,
         ramMb: input.ramMb,
-        icon: input.icon ?? 'Package'
+        icon: input.icon ?? 'Package',
+        backgroundImage: input.backgroundImage
       })
       const instanceDir = paths.instance(profile.id)
 

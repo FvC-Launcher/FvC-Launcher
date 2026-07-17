@@ -74,6 +74,7 @@ export const profilesService = {
       id: randomUUID(),
       name,
       icon: input.icon ?? 'Package',
+      backgroundImage: input.backgroundImage || undefined,
       minecraftVersion: input.minecraftVersion,
       loader: input.loader,
       loaderVersion: input.loader === 'vanilla' ? undefined : input.loaderVersion,

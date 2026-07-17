@@ -124,7 +124,7 @@ function emit(p: ModpackProgress): void {
 /** Shared installer: parse a CF pack zip, create the profile, fetch everything. */
 async function installFromZip(
   zipPath: string,
-  input: { name: string; icon?: string; ramMb: number },
+  input: { name: string; icon?: string; backgroundImage?: string; ramMb: number },
   packLabel: string
 ): Promise<Profile> {
   let profile: Profile | null = null
@@ -149,7 +149,8 @@ async function installFromZip(
       loader,
       loaderVersion,
       ramMb: input.ramMb,
-      icon: input.icon ?? 'Package'
+      icon: input.icon ?? 'Package',
+      backgroundImage: input.backgroundImage
     })
     const instanceDir = paths.instance(profile.id)
 

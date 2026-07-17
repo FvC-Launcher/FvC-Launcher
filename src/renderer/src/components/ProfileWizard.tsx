@@ -8,6 +8,7 @@ import {
   Eye,
   ExternalLink,
   FileArchive,
+  Image as ImageIcon,
   Package,
   PackageOpen,
   Search,
@@ -66,6 +67,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('Package')
+  const [cover, setCover] = useState('')
   const [mcVersions, setMcVersions] = useState<McVersion[]>([])
   const [showSnapshots, setShowSnapshots] = useState(false)
   const [mcVersion, setMcVersion] = useState('')
@@ -101,6 +103,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
       setStep(0)
       setName('')
       setIcon('Package')
+      setCover('')
       setLoader('vanilla')
       setLoaderVersion('')
       setRamMb(4096)
@@ -255,6 +258,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
           profile = await window.fvc.modpacks.install({
             name: name.trim(),
             icon,
+            backgroundImage: cover || undefined,
             ramMb,
             projectId: selection.hit.project_id,
             versionId: packVersionId
@@ -263,6 +267,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
           profile = await window.fvc.curseforge.install({
             name: name.trim(),
             icon,
+            backgroundImage: cover || undefined,
             ramMb,
             modId: selection.pack.id
           })
@@ -270,6 +275,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
           profile = await window.fvc.curseforge.installZip({
             name: name.trim(),
             icon,
+            backgroundImage: cover || undefined,
             ramMb,
             zipPath: selection.path
           })
@@ -281,7 +287,8 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
           loader,
           loaderVersion: loader === 'vanilla' ? undefined : loaderVersion,
           ramMb,
-          icon
+          icon,
+          backgroundImage: cover || undefined
         })
         pushNotification({ type: 'success', title: `${profile.name} created` })
       }
@@ -464,6 +471,56 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                           </button>
                         ))}
                       </div>
+                    </Field>
+                    <Field label="Cover image (optional)">
+                      {cover ? (
+                        <div
+                          className="card"
+                          style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius)' }}
+                        >
+                          <img
+                            src={cover}
+                            alt=""
+                            style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
+                          />
+                          <div
+                            className="row"
+                            style={{ position: 'absolute', top: 8, right: 8, gap: 6 }}
+                          >
+                            <Button
+                              icon={ImageIcon}
+                              onClick={() =>
+                                void window.fvc.system.pickImage().then((img) => img && setCover(img))
+                              }
+                            >
+                              Change
+                            </Button>
+                            <Button variant="danger" icon={X} onClick={() => setCover('')} aria-label="Remove cover" />
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="card hoverable"
+                          style={{
+                            width: '100%',
+                            padding: '22px 16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 8,
+                            border: '1px dashed rgba(255,255,255,0.15)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() =>
+                            void window.fvc.system.pickImage().then((img) => img && setCover(img))
+                          }
+                        >
+                          <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />
+                          <span className="tiny">
+                            Choose an image — shown on the profile card and Play page
+                          </span>
+                        </button>
+                      )}
                     </Field>
                   </>
                 )}

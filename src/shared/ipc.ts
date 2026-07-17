@@ -42,6 +42,7 @@ export interface ModrinthSearchParams {
 export interface ModpackInstallInput {
   name: string
   icon?: string
+  backgroundImage?: string
   ramMb: number
   projectId: string
   versionId: string
@@ -57,6 +58,7 @@ export interface CurseForgeSearchParams {
 export interface CurseForgeInstallInput {
   name: string
   icon?: string
+  backgroundImage?: string
   ramMb: number
   modId: number
 }
@@ -64,6 +66,7 @@ export interface CurseForgeInstallInput {
 export interface CurseForgeZipInstallInput {
   name: string
   icon?: string
+  backgroundImage?: string
   ramMb: number
   zipPath: string
 }
@@ -75,6 +78,8 @@ export interface CreateProfileInput {
   loaderVersion?: string
   ramMb: number
   icon?: string
+  /** Optional cover image (fvc-file:/// URL) shown on the card and Play page. */
+  backgroundImage?: string
 }
 
 export interface FvcApi {

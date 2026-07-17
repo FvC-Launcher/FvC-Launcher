@@ -58,13 +58,24 @@ export function HomePage(): ReactNode {
             </p>
           </div>
           {account ? (
-            <div className="row card" style={{ padding: '10px 16px', gap: 12 }}>
+            <button
+              className="row card hoverable"
+              style={{ padding: '10px 16px', gap: 12, textAlign: 'left', cursor: 'pointer' }}
+              onClick={() => navigate('accounts')}
+            >
               <Avatar username={account.type === 'microsoft' ? account.username : ''} size={36} radius={8} />
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{account.username}</div>
-                <div className="tiny">{account.type === 'microsoft' ? 'Microsoft' : 'Offline'}</div>
+                {/* The startup session check flags dead Microsoft sessions. */}
+                {account.needsRelogin ? (
+                  <div className="badge error" style={{ marginTop: 3 }}>Session expired — sign in again</div>
+                ) : (
+                  <div className="tiny">
+                    {account.type === 'microsoft' ? 'Microsoft · session active' : 'Offline'}
+                  </div>
+                )}
               </div>
-            </div>
+            </button>
           ) : (
             <Button variant="primary" icon={User} onClick={() => navigate('accounts')}>
               Add account
