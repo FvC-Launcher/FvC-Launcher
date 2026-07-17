@@ -1,9 +1,13 @@
 # Builds Windows + Linux installers and publishes them (with the updater
 # metadata files) to a GitHub Release whenever a v* tag is pushed.
 #
+# Two-phase publish: both platforms upload into a hidden DRAFT release, and a
+# final job flips it public only after every asset is in place. Users (and the
+# auto-updater) never see a release that is missing files.
+#
 # Usage:
-#   1. Bump "version" in package.json (e.g. 1.2.0)
-#   2. git commit -am "v1.2.0" && git tag v1.2.0 && git push && git push --tags
+#   1. Bump "version" in package.json (e.g. 1.2.4)
+#   2. git commit -am "v1.2.4" && git tag v1.2.4 && git push && git push --tags
 #   3. This workflow creates the release; installed launchers then offer the update.
 name: Release
 
@@ -16,7 +20,7 @@ permissions:
   contents: write # electron-builder uploads release assets with GITHUB_TOKEN
 
 jobs:
-  release:
+  build:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -50,7 +54,22 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Build and publish
+      - name: Build and upload to draft release
         run: npx electron-vite build && npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Force a draft while uploading; the publish job makes it public
+          # only after BOTH platforms uploaded all their files.
+          EP_DRAFT: 'true'
+
+  publish:
+    # Runs only when every build job succeeded — then the complete release
+    # (exe + blockmap + latest.yml + AppImage + deb + latest-linux.yml)
+    # becomes visible atomically.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false
