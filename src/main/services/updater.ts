@@ -27,11 +27,47 @@ function setState(next: UpdaterState): void {
   broadcast(CH.updaterState, state)
 }
 
+/**
+ * The GitHub provider hands release notes over as HTML (converted from the
+ * release body). The renderer escapes HTML for safety, so convert the common
+ * tags back to markdown-ish text before showing them.
+ */
+function htmlToMarkdown(html: string): string {
+  if (!/<[a-z][^>]*>/i.test(html)) return html // already plain text/markdown
+  return (
+    html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>\s*<p>/gi, '\n\n')
+      .replace(/<\/?p[^>]*>/gi, '\n')
+      .replace(/<h([1-6])[^>]*>/gi, (_m, n: string) => '\n' + '#'.repeat(Number(n)) + ' ')
+      .replace(/<\/h[1-6]>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '- ')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<\/?(ul|ol)[^>]*>/gi, '\n')
+      .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)')
+      .replace(/<(strong|b)>([\s\S]*?)<\/\1>/gi, '**$2**')
+      .replace(/<(em|i)>([\s\S]*?)<\/\1>/gi, '*$2*')
+      .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
+      .replace(/<[^>]+>/g, '') // strip anything else
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  )
+}
+
 function releaseNotesToString(notes: unknown): string | undefined {
-  if (typeof notes === 'string') return notes
+  if (typeof notes === 'string') return htmlToMarkdown(notes)
   if (Array.isArray(notes)) {
     return notes
-      .map((n) => (typeof n === 'string' ? n : `## ${n.version}\n\n${n.note ?? ''}`))
+      .map((n) =>
+        typeof n === 'string'
+          ? htmlToMarkdown(n)
+          : `## ${n.version}\n\n${htmlToMarkdown(String(n.note ?? ''))}`
+      )
       .join('\n\n')
   }
   return undefined
