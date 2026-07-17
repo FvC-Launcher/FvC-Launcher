@@ -12,6 +12,7 @@ import {
   Terminal
 } from 'lucide-react'
 import { Avatar, Button, Modal, Select, Toggle } from '@/components/ui'
+import { AddAccountModal } from '@/components/AddAccountModal'
 import { useApp, useSelectedProfile } from '@/store'
 import { LOADER_LABELS, profileIcon } from '@/lib'
 
@@ -30,6 +31,7 @@ export function PlayPage(): ReactNode {
   const [showConsole, setShowConsole] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [accountPickerOpen, setAccountPickerOpen] = useState(false)
+  const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [dontAskAgain, setDontAskAgain] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
 
@@ -52,9 +54,16 @@ export function PlayPage(): ReactNode {
   const busy = ['verifying', 'java', 'loader', 'assets', 'launching'].includes(launch.phase)
   const running = launch.phase === 'running'
 
-  /** Entry point for the Play button: asks which account when several exist. */
+  /**
+   * Entry point for the Play button: with no accounts, offer to add one
+   * (and continue launching once added); with several, ask which to use.
+   */
   const requestStart = (): void => {
     if (!profile) return
+    if (accounts.length === 0) {
+      setAddAccountOpen(true)
+      return
+    }
     if (accounts.length > 1 && settings.askAccountOnPlay) {
       setDontAskAgain(false)
       setAccountPickerOpen(true)
@@ -242,6 +251,14 @@ export function PlayPage(): ReactNode {
         </summary>
         <ProfileLaunchOptions />
       </details>
+
+      {/* No account yet: same add-account chooser as the Accounts page,
+          then continue straight into the launch. */}
+      <AddAccountModal
+        open={addAccountOpen}
+        onClose={() => setAddAccountOpen(false)}
+        onAdded={() => void start()}
+      />
 
       {/* Account picker (shown when several accounts exist) */}
       <Modal

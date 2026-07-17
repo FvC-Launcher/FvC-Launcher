@@ -8,58 +8,22 @@ import {
   RefreshCw,
   Trash2,
   User,
-  UserPlus,
   WifiOff
 } from 'lucide-react'
-import { Avatar, Button, ConfirmDialog, EmptyState, Field, Input, Modal } from '@/components/ui'
+import { Avatar, Button, ConfirmDialog, EmptyState } from '@/components/ui'
+import { AddAccountModal, useMicrosoftLogin } from '@/components/AddAccountModal'
 import { formatRelative, useApp } from '@/store'
 import type { Account } from '@shared/types'
 
 export function AccountsPage(): ReactNode {
   const accounts = useApp((s) => s.accounts)
   const activeId = useApp((s) => s.activeAccountId)
-  const refreshAccounts = useApp((s) => s.refreshAccounts)
   const pushNotification = useApp((s) => s.pushNotification)
 
   const [addOpen, setAddOpen] = useState(false)
-  const [offlineOpen, setOfflineOpen] = useState(false)
-  const [offlineName, setOfflineName] = useState('')
-  const [msBusy, setMsBusy] = useState(false)
   const [refreshing, setRefreshing] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<Account | null>(null)
-
-  const loginMicrosoft = async (): Promise<void> => {
-    setMsBusy(true)
-    try {
-      const account = await window.fvc.accounts.loginMicrosoft()
-      pushNotification({ type: 'success', title: `Signed in as ${account.username}` })
-      setAddOpen(false)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      // msmc reports a closed login window as "error.gui.closed" — treat as cancel.
-      if (!/cancel|gui\.closed/i.test(message)) {
-        pushNotification({ type: 'error', title: 'Sign-in failed', body: message })
-      }
-    } finally {
-      setMsBusy(false)
-      await refreshAccounts()
-    }
-  }
-
-  const addOffline = async (): Promise<void> => {
-    try {
-      const account = await window.fvc.accounts.addOffline(offlineName)
-      pushNotification({ type: 'success', title: `Added offline account ${account.username}` })
-      setOfflineOpen(false)
-      setOfflineName('')
-    } catch (err) {
-      pushNotification({
-        type: 'error',
-        title: 'Could not add account',
-        body: err instanceof Error ? err.message : String(err)
-      })
-    }
-  }
+  const { busy: msBusy, login: loginMicrosoft } = useMicrosoftLogin()
 
   const refreshSession = async (account: Account): Promise<void> => {
     setRefreshing(account.id)
@@ -166,71 +130,7 @@ export function AccountsPage(): ReactNode {
         </div>
       )}
 
-      {/* Add account chooser */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add account">
-        <div className="modal-body">
-          <button
-            className="card hoverable row"
-            style={{ padding: 18, gap: 14, width: '100%', textAlign: 'left' }}
-            onClick={() => void loginMicrosoft()}
-          >
-            <span className="mod-icon" style={{ width: 46, height: 46, color: 'var(--accent)' }}>
-              {msBusy ? <span className="spinner" /> : <LogIn size={20} />}
-            </span>
-            <div>
-              <div style={{ fontWeight: 700 }}>Microsoft account</div>
-              <div className="tiny" style={{ marginTop: 3, lineHeight: 1.4 }}>
-                Official sign-in for online play. Stays signed in until you log out.
-              </div>
-            </div>
-          </button>
-          <button
-            className="card hoverable row"
-            style={{ padding: 18, gap: 14, width: '100%', textAlign: 'left' }}
-            onClick={() => {
-              setAddOpen(false)
-              setOfflineOpen(true)
-            }}
-          >
-            <span className="mod-icon" style={{ width: 46, height: 46 }}>
-              <UserPlus size={20} />
-            </span>
-            <div>
-              <div style={{ fontWeight: 700 }}>Offline account</div>
-              <div className="tiny" style={{ marginTop: 3, lineHeight: 1.4 }}>
-                Just a username. For singleplayer and offline-mode servers.
-              </div>
-            </div>
-          </button>
-        </div>
-      </Modal>
-
-      {/* Offline username dialog */}
-      <Modal
-        open={offlineOpen}
-        onClose={() => setOfflineOpen(false)}
-        title="Offline account"
-        footer={
-          <>
-            <Button onClick={() => setOfflineOpen(false)}>Cancel</Button>
-            <Button variant="primary" disabled={!offlineName.trim()} onClick={() => void addOffline()}>
-              Add
-            </Button>
-          </>
-        }
-      >
-        <div className="modal-body">
-          <Field label="Username">
-            <Input
-              autoFocus
-              placeholder="Steve"
-              value={offlineName}
-              onChange={(e) => setOfflineName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && offlineName.trim() && void addOffline()}
-            />
-          </Field>
-        </div>
-      </Modal>
+      <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} />
 
       <ConfirmDialog
         open={removeTarget !== null}

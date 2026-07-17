@@ -54,6 +54,27 @@ function decryptToken(stored: string): string {
   return safeStorage.decryptString(Buffer.from(stored, 'base64'))
 }
 
+/**
+ * msmc rejects with plain lexicon objects ({ name, message }), not Errors.
+ * Convert them so the real reason survives IPC instead of "[object Object]".
+ */
+function asError(err: unknown): Error {
+  if (err instanceof Error) return err
+  if (err && typeof err === 'object') {
+    const o = err as { name?: unknown; message?: unknown; error?: unknown; reason?: unknown }
+    const parts = [o.name, o.message ?? o.error ?? o.reason].filter(
+      (p): p is string => typeof p === 'string' && p.length > 0
+    )
+    if (parts.length > 0) return new Error(parts.join(': '))
+    try {
+      return new Error(JSON.stringify(err))
+    } catch {
+      /* circular — fall through */
+    }
+  }
+  return new Error(String(err))
+}
+
 /** Deterministic offline UUID, matching vanilla's OfflinePlayer scheme. */
 function offlineUuid(username: string): string {
   const hash = createHash('md5').update(`OfflinePlayer:${username}`).digest()
@@ -114,14 +135,19 @@ export const accountsService = {
   },
 
   async loginMicrosoft(): Promise<Account> {
-    const auth = new Auth('select_account')
-    const xbox = await auth.launch('electron', {
-      title: 'Sign in to Microsoft - FvC Launcher',
-      backgroundColor: '#0F1115',
-      width: 480,
-      height: 640
-    })
-    const mc = await xbox.getMinecraft()
+    let mc: Minecraft
+    try {
+      const auth = new Auth('select_account')
+      const xbox = await auth.launch('electron', {
+        title: 'Sign in to Microsoft - FvC Launcher',
+        backgroundColor: '#0F1115',
+        width: 480,
+        height: 640
+      })
+      mc = await xbox.getMinecraft()
+    } catch (err) {
+      throw asError(err)
+    }
     if (!mc.profile?.id) {
       throw new Error('This Microsoft account does not own Minecraft: Java Edition.')
     }
@@ -166,7 +192,7 @@ export const accountsService = {
         title: 'Session expired',
         body: `Please sign in again with ${stored.username}.`
       })
-      throw err instanceof Error ? err : new Error(String(err))
+      throw asError(err)
     }
   },
 
@@ -191,9 +217,14 @@ export const accountsService = {
     }
 
     if (!stored.encryptedToken) throw new Error('Session missing. Please sign in again.')
-    const auth = new Auth('select_account')
-    const token = JSON.parse(decryptToken(stored.encryptedToken))
-    const mc = await tokenUtils.fromToken(auth, token, true)
+    let mc: Minecraft
+    try {
+      const auth = new Auth('select_account')
+      const token = JSON.parse(decryptToken(stored.encryptedToken))
+      mc = await tokenUtils.fromToken(auth, token, true)
+    } catch (err) {
+      throw asError(err)
+    }
 
     // Persist rotated refresh token.
     const updated = mcAccountFromMsmc(mc, stored.id)
