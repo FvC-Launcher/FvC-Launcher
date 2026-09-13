@@ -61,7 +61,7 @@ const api: FvcApi = {
     featured: () => ipcRenderer.invoke(CH.mrFeatured)
   },
   versions: {
-    minecraft: (snapshots) => ipcRenderer.invoke(CH.versionsMc, snapshots),
+    minecraft: (snapshots, historical) => ipcRenderer.invoke(CH.versionsMc, snapshots, historical),
     loader: (loader, gv) => ipcRenderer.invoke(CH.versionsLoader, loader, gv)
   },
   java: {

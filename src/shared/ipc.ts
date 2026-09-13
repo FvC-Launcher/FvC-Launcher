@@ -139,7 +139,7 @@ export interface FvcApi {
     featured(): Promise<ModrinthSearchResult>
   }
   versions: {
-    minecraft(includeSnapshots: boolean): Promise<McVersion[]>
+    minecraft(includeSnapshots: boolean, includeHistorical: boolean): Promise<McVersion[]>
     loader(loader: LoaderId, gameVersion: string): Promise<LoaderVersionInfo[]>
   }
   java: {

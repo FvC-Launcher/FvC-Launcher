@@ -104,7 +104,7 @@ export function registerIpc(): void {
   ipcMain.handle(CH.mrFeatured, () => modrinthService.featured())
 
   // Versions
-  ipcMain.handle(CH.versionsMc, (_e, snapshots) => versionsService.minecraft(snapshots))
+  ipcMain.handle(CH.versionsMc, (_e, snapshots, historical) => versionsService.minecraft(snapshots, historical))
   ipcMain.handle(CH.versionsLoader, (_e, loader, gv) => versionsService.loader(loader, gv))
 
   // Java

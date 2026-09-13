@@ -70,6 +70,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   const [cover, setCover] = useState('')
   const [mcVersions, setMcVersions] = useState<McVersion[]>([])
   const [showSnapshots, setShowSnapshots] = useState(false)
+  const [showHistoricalVersions, setShowHistoricalVersions] = useState(false)
   const [mcVersion, setMcVersion] = useState('')
   const [loader, setLoader] = useState<LoaderId>('vanilla')
   const [loaderVersions, setLoaderVersions] = useState<LoaderVersionInfo[] | null>(null)
@@ -104,6 +105,9 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
       setName('')
       setIcon('Package')
       setCover('')
+      setShowSnapshots(false)
+      setShowHistoricalVersions(false)
+      setMcVersion('')
       setLoader('vanilla')
       setLoaderVersion('')
       setRamMb(4096)
@@ -123,7 +127,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   useEffect(() => {
     if (!open) return
     void window.fvc.versions
-      .minecraft(showSnapshots)
+      .minecraft(showSnapshots, showHistoricalVersions)
       .then((versions) => {
         setMcVersions(versions)
         setMcVersion((current) => current || versions.find((v) => v.type === 'release')?.id || '')
@@ -131,7 +135,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
       .catch((err) =>
         pushNotification({ type: 'error', title: 'Could not load Minecraft versions', body: String(err) })
       )
-  }, [open, showSnapshots, pushNotification])
+  }, [open, showSnapshots, showHistoricalVersions, pushNotification])
 
   // Loader versions (empty-profile branch).
   useEffect(() => {
@@ -541,6 +545,10 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                     <label className="row" style={{ gap: 10, cursor: 'pointer' }}>
                       <Toggle checked={showSnapshots} onChange={setShowSnapshots} />
                       <span style={{ fontSize: '0.86rem' }}>Show snapshots</span>
+                    </label>
+                    <label className="row" style={{ gap: 10, cursor: 'pointer' }}>
+                      <Toggle checked={showHistoricalVersions} onChange={setShowHistoricalVersions} />
+                      <span style={{ fontSize: '0.86rem' }}>Show historical versions (before 1.0)</span>
                     </label>
                   </>
                 )}

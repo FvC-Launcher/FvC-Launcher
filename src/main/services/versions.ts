@@ -23,12 +23,17 @@ interface PistonManifest {
 }
 
 export const versionsService = {
-  async minecraft(includeSnapshots: boolean): Promise<McVersion[]> {
+  async minecraft(includeSnapshots: boolean, includeHistorical = false): Promise<McVersion[]> {
     const manifest = await cached('mc-manifest', () =>
       getJson<PistonManifest>('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')
     )
     return manifest.versions
-      .filter((v) => v.type === 'release' || (includeSnapshots && v.type === 'snapshot'))
+      .filter(
+        (v) =>
+          v.type === 'release' ||
+          (includeSnapshots && v.type === 'snapshot') ||
+          (includeHistorical && (v.type === 'old_beta' || v.type === 'old_alpha'))
+      )
       .map((v) => ({
         id: v.id,
         type: v.type as McVersion['type'],
