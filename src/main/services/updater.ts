@@ -1,5 +1,7 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { accessSync, constants } from 'fs'
+import { dirname } from 'path'
 import { broadcast, notify } from '../broadcast'
 import { CH } from '@shared/ipc'
 import { settingsService } from './settings'
@@ -24,12 +26,27 @@ let manualCheck = false
 
 /**
  * electron-updater can only self-install on Linux when running from an
- * AppImage (it rewrites that file in place). A .deb/.rpm install lives under
- * a root-owned path like /opt/fvc-launcher, so quitAndInstall() would try to
- * unlink a file the app has no permission to touch. Those installs get a
- * "download manually" prompt instead of the auto-download/install flow.
+ * AppImage — it unlinks and replaces process.env.APPIMAGE in place. That env
+ * var is set for *any* AppImage, including ones a package (.deb, or the AUR
+ * fvc-launcher-bin package) drops in a root-owned path like
+ * /opt/fvc-launcher: unlink() needs write access to the containing
+ * directory, not just the file, so those still fail with EACCES even though
+ * APPIMAGE is defined. Only an AppImage sitting somewhere the current user
+ * can actually write (e.g. ~/Applications, ~/Downloads) can self-update;
+ * everything else gets a "download manually" prompt instead.
  */
-const canSelfUpdate = process.platform !== 'linux' || !!process.env['APPIMAGE']
+function canSelfUpdateOnLinux(): boolean {
+  const appImage = process.env['APPIMAGE']
+  if (!appImage) return false
+  try {
+    accessSync(dirname(appImage), constants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const canSelfUpdate = process.platform !== 'linux' || canSelfUpdateOnLinux()
 
 function setState(next: UpdaterState): void {
   state = next
