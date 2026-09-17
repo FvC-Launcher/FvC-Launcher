@@ -9,8 +9,6 @@ import type {
   ContentKind,
   CurseForgePack,
   DownloadTask,
-  HwidFixResult,
-  HwidStatus,
   InstalledContent,
   JavaInstall,
   LaunchState,
@@ -192,13 +190,6 @@ export interface FvcApi {
     status(): Promise<LegalStatus>
     accept(): Promise<void>
   }
-  hwid: {
-    status(): Promise<HwidStatus>
-    autofix(): Promise<HwidFixResult>
-    onFixProgress(cb: (step: string) => void): () => void
-    relaunch(): void
-    exit(): void
-  }
   updater: {
     /** Manual check; state events carry the outcome. */
     check(): Promise<void>
@@ -302,11 +293,6 @@ export const CH = {
   legalStatus: 'legal:status',
   legalAccept: 'legal:accept',
 
-  hwidStatus: 'hwid:status',
-  hwidAutofix: 'hwid:autofix',
-  hwidFixProgress: 'hwid:fixProgress',
-  appRelaunch: 'app:relaunch',
-  appExit: 'app:exit',
 
   updaterCheck: 'updater:check',
   updaterDownload: 'updater:download',

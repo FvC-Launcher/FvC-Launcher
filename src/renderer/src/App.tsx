@@ -7,7 +7,6 @@ import { NotificationHost } from '@/components/NotificationHost'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ModDetailsModal } from '@/components/ModDetailsModal'
 import { FirstRunGate } from '@/components/FirstRunGate'
-import { HwidScreen } from '@/components/HwidScreen'
 import { UpdateModal } from '@/components/UpdateModal'
 import { HomePage } from '@/pages/HomePage'
 import { PlayPage } from '@/pages/PlayPage'
@@ -63,9 +62,7 @@ export default function App(): ReactNode {
 
   const PageComponent = PAGES[page]
 
-  // Startup gates: HWID validation failure replaces the whole app; the
-  // first-run legal dialog blocks it until accepted.
-  if (boot === 'hwid') return <HwidScreen />
+  // The first-run legal dialog blocks the app until accepted.
   if (boot === 'loading') {
     return (
       <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center' }}>

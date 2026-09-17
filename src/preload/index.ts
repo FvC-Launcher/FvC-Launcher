@@ -111,13 +111,6 @@ const api: FvcApi = {
     status: () => ipcRenderer.invoke(CH.legalStatus),
     accept: () => ipcRenderer.invoke(CH.legalAccept)
   },
-  hwid: {
-    status: () => ipcRenderer.invoke(CH.hwidStatus),
-    autofix: () => ipcRenderer.invoke(CH.hwidAutofix),
-    onFixProgress: (cb) => subscribe(CH.hwidFixProgress, cb),
-    relaunch: () => ipcRenderer.send(CH.appRelaunch),
-    exit: () => ipcRenderer.send(CH.appExit)
-  },
   updater: {
     check: () => ipcRenderer.invoke(CH.updaterCheck),
     download: () => ipcRenderer.invoke(CH.updaterDownload),

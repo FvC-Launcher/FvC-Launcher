@@ -14,8 +14,8 @@ export interface Notification extends NotificationPayload {
   id: string
 }
 
-/** Startup gate: HWID validation → legal acceptance → app. */
-export type BootPhase = 'loading' | 'hwid' | 'legal' | 'ready'
+/** Startup gate: legal acceptance → app. */
+export type BootPhase = 'loading' | 'legal' | 'ready'
 
 interface AppState {
   // Boot
@@ -119,13 +119,6 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   init: async () => {
-    // Startup sequence: HWID validation gates everything else.
-    const hwidStatus = await window.fvc.hwid.status()
-    if (hwidStatus !== 'valid') {
-      set({ boot: 'hwid' })
-      return
-    }
-
     const [settings, launch, downloads, totalRamMb, legal] = await Promise.all([
       window.fvc.settings.get(),
       window.fvc.launch.getState(),

@@ -218,15 +218,6 @@ textarea {
   margin: 0 auto;
 }
 
-.hwid-drag {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 44px;
-  -webkit-app-region: drag;
-}
-
 .page-anim {
   animation: page-in var(--dur) var(--ease) both;
 }

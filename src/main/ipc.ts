@@ -17,7 +17,6 @@ import { newsService } from './services/news'
 import { modpacksService } from './services/modpacks'
 import { curseforgeService } from './services/curseforge'
 import { legalService } from './services/legal'
-import { hwidService } from './services/hwid'
 import { updaterService } from './services/updater'
 
 export function registerIpc(): void {
@@ -168,12 +167,4 @@ export function registerIpc(): void {
   ipcMain.on(CH.updaterInstall, () => updaterService.install())
   ipcMain.handle(CH.updaterGetState, () => updaterService.getState())
 
-  // HWID + app lifecycle
-  ipcMain.handle(CH.hwidStatus, () => hwidService.status())
-  ipcMain.handle(CH.hwidAutofix, () => hwidService.autofix())
-  ipcMain.on(CH.appRelaunch, () => {
-    app.relaunch()
-    app.exit(0)
-  })
-  ipcMain.on(CH.appExit, () => app.exit(0))
 }

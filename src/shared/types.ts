@@ -354,15 +354,6 @@ export interface CurseForgePack {
   websiteUrl: string | null
 }
 
-// ----------------------------------- HWID ----------------------------------
-
-export type HwidStatus = 'valid' | 'invalid'
-
-export interface HwidFixResult {
-  ok: boolean
-  message: string
-}
-
 // ----------------------------------- Legal ---------------------------------
 
 export interface LegalStatus {

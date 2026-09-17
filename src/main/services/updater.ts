@@ -142,7 +142,7 @@ export const updaterService = {
     wireEvents()
 
     if (settingsService.get().checkLauncherUpdates) {
-      // Give startup (HWID gate, window paint) a moment before checking.
+      // Give startup and window paint a moment before checking.
       setTimeout(() => {
         void autoUpdater.checkForUpdates().catch(() => {
           /* offline etc. — state already set by the error event */

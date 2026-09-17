@@ -37,27 +37,23 @@ The Launcher supports signing in with a Microsoft account through Microsoft's of
 
 Mods, modpacks, resource packs and shader packs are created by third parties and downloaded from third-party services (primarily Modrinth). We do not control and are not responsible for third-party content, its licenses, or its behavior. The Launcher also connects to Mojang/Microsoft servers (game files, authentication), Adoptium (Java runtimes) and mcheads.org (avatar images).
 
-## 5. Launcher integrity and access control (HWID)
-
-On first launch the Launcher derives a hardware-based identifier ("HWID") from stable, non-personal characteristics of your device (see the Privacy Policy). The HWID is hashed and stored only on your device in a protected record. It exists solely to support launcher integrity verification and access-control features described in this Agreement, such as detecting corrupted installations. It is not designed to personally identify you and is never used for advertising.
-
-## 6. Updates
+## 5. Updates
 
 The Launcher may check for updates when this feature is enabled in Settings. Updated versions of this Agreement or the Privacy Policy may be presented for acceptance before continued use.
 
-## 7. No warranty
+## 6. No warranty
 
 THE LAUNCHER IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. WE DO NOT WARRANT THAT IT WILL BE ERROR-FREE, THAT GAME OR MOD CONTENT WILL WORK, OR THAT THIRD-PARTY SERVICES WILL REMAIN AVAILABLE.
 
-## 8. Limitation of liability
+## 7. Limitation of liability
 
 TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL OR CONSEQUENTIAL DAMAGES, INCLUDING LOSS OF DATA, SAVES OR PROFILES, ARISING FROM THE USE OF THE LAUNCHER.
 
-## 9. Termination
+## 8. Termination
 
 This license ends automatically if you breach this Agreement. You may end it at any time by uninstalling the Launcher and deleting its data directory.
 
-## 10. Contact
+## 9. Contact
 
 Questions about this Agreement can be raised through the project's public repository or support channels listed on the About page.
 `
@@ -73,7 +69,6 @@ This policy explains what information FvC Launcher ("the Launcher") stores and t
 - **Settings** — launcher preferences (theme, RAM defaults, download options).
 - **Profiles** — profile names, versions, loaders, play time, and the files inside each profile folder (mods, configs, saves, screenshots).
 - **Accounts** — your Minecraft username and UUID. For Microsoft accounts, authentication tokens are stored **encrypted** using your operating system's secure storage (DPAPI on Windows, keyring on Linux). Your Microsoft password is never seen or stored by the Launcher.
-- **Hardware identifier (HWID)** — a cryptographic hash derived from stable, non-personal device characteristics (such as an OS installation identifier and CPU model). Raw values are not stored — only hashes — inside a protected, integrity-checked record. It never leaves your device.
 - **Legal acceptance** — which versions of the EULA and this policy you accepted, and when.
 
 This data lives in the Launcher's application-data directory and is removed if you delete that directory or uninstall the Launcher.
@@ -94,7 +89,7 @@ Each request includes a standard launcher user-agent string. We add no tracking 
 
 - No analytics, telemetry or usage tracking.
 - No advertising and no sale of data.
-- No transmission of your HWID, settings, profiles or file lists to us or anyone else.
+- No transmission of your settings, profiles or file lists to us or anyone else.
 - No storage of passwords.
 
 ## 4. Your controls

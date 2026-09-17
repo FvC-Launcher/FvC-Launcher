@@ -5,7 +5,6 @@ import { JsonStore } from './store'
 import { ensureDirs, paths } from './paths'
 import { registerIpc } from './ipc'
 import { broadcast } from './broadcast'
-import { hwidService } from './services/hwid'
 import { accountsService } from './services/accounts'
 import { updaterService } from './services/updater'
 import { CH } from '@shared/ipc'
@@ -19,6 +18,14 @@ interface WindowState {
 }
 
 let windowStore: JsonStore<WindowState>
+
+// Render natively on Wayland instead of falling back to XWayland, which
+// upscales a lower-res X11 buffer and looks blurry under fractional scaling
+// (e.g. Hyprland). Must be set before the app is ready.
+if (process.platform === 'linux' && (process.env['XDG_SESSION_TYPE'] === 'wayland' || process.env['WAYLAND_DISPLAY'])) {
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
+  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations')
+}
 
 // Serve user-picked local images (profile/app backgrounds) to the renderer.
 protocol.registerSchemesAsPrivileged([
@@ -129,17 +136,12 @@ if (!gotLock) {
 
     registerIpc()
 
-    // Startup sequence: HWID validation runs before the UI becomes usable
-    // (the renderer boot gate asks for this status first). Kick it off now.
-    const hwidStatus = await hwidService.status()
     createWindow()
 
-    if (hwidStatus === 'valid') {
-      // Keep Microsoft sessions fresh without blocking startup.
-      setTimeout(() => accountsService.refreshAllInBackground(), 2500)
-      // Check GitHub Releases for launcher updates (packaged builds only).
-      updaterService.init()
-    }
+    // Keep Microsoft sessions fresh without blocking startup.
+    setTimeout(() => accountsService.refreshAllInBackground(), 2500)
+    // Check GitHub Releases for launcher updates (packaged builds only).
+    updaterService.init()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
