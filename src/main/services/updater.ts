@@ -22,6 +22,15 @@ let initialized = false
 /** Distinguishes user-triggered checks (verbose) from background ones (quiet). */
 let manualCheck = false
 
+/**
+ * electron-updater can only self-install on Linux when running from an
+ * AppImage (it rewrites that file in place). A .deb/.rpm install lives under
+ * a root-owned path like /opt/fvc-launcher, so quitAndInstall() would try to
+ * unlink a file the app has no permission to touch. Those installs get a
+ * "download manually" prompt instead of the auto-download/install flow.
+ */
+const canSelfUpdate = process.platform !== 'linux' || !!process.env['APPIMAGE']
+
 function setState(next: UpdaterState): void {
   state = next
   broadcast(CH.updaterState, state)
@@ -75,14 +84,14 @@ function releaseNotesToString(notes: unknown): string | undefined {
 
 function wireEvents(): void {
   autoUpdater.autoDownload = false // never download without consent
-  autoUpdater.autoInstallOnAppQuit = true // downloaded updates apply on quit
+  autoUpdater.autoInstallOnAppQuit = canSelfUpdate // downloaded updates apply on quit
   autoUpdater.allowPrerelease = false
 
   autoUpdater.on('checking-for-update', () => setState({ status: 'checking' }))
 
   autoUpdater.on('update-available', (info) => {
     setState({
-      status: 'available',
+      status: canSelfUpdate ? 'available' : 'manual',
       version: info.version,
       notes: releaseNotesToString(info.releaseNotes)
     })
@@ -169,7 +178,7 @@ export const updaterService = {
   },
 
   async download(): Promise<void> {
-    if (!app.isPackaged || state.status !== 'available') return
+    if (!app.isPackaged || !canSelfUpdate || state.status !== 'available') return
     setState({ ...state, status: 'downloading', percent: 0 })
     await autoUpdater.downloadUpdate().catch(() => {
       /* error event handles state */
@@ -177,7 +186,7 @@ export const updaterService = {
   },
 
   install(): void {
-    if (state.status !== 'downloaded') return
+    if (!canSelfUpdate || state.status !== 'downloaded') return
     // isSilent=false shows the platform installer UI, forceRunAfter=true
     // relaunches the app when it finishes.
     autoUpdater.quitAndInstall(false, true)

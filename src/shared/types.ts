@@ -370,6 +370,7 @@ export type UpdaterStatus =
   | 'available'
   | 'downloading'
   | 'downloaded'
+  | 'manual'
   | 'error'
   | 'dev'
 

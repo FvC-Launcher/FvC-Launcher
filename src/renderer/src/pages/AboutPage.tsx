@@ -25,6 +25,7 @@ export function AboutPage(): ReactNode {
     available: `v${updater.version} available`,
     downloading: `Downloading… ${Math.round(updater.percent ?? 0)}%`,
     downloaded: 'Restart to install',
+    manual: `v${updater.version} available`,
     error: 'Check for updates',
     dev: 'Check for updates'
   }[updater.status]
@@ -46,7 +47,11 @@ export function AboutPage(): ReactNode {
             loading={updater.status === 'checking'}
             onClick={() => {
               if (updater.status === 'downloaded') window.fvc.updater.install()
-              else void window.fvc.updater.check()
+              else if (updater.status === 'manual') {
+                window.fvc.system.openExternal(
+                  'https://github.com/FvC-Launcher/FvC-Launcher/releases/latest'
+                )
+              } else void window.fvc.updater.check()
             }}
           >
             {updateLabel}

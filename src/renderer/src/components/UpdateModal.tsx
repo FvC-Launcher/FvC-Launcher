@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUpCircle, Clock, Download, RotateCcw } from 'lucide-react'
+import { ArrowUpCircle, Clock, Download, ExternalLink, RotateCcw } from 'lucide-react'
 import { Button, Modal, Progress } from '@/components/ui'
 import { formatBytes } from '@/store'
 import { renderMarkdown } from '@/markdown'
@@ -27,7 +27,7 @@ export function UpdateModal(): ReactNode {
     }
   }, [state.status])
 
-  const relevant = ['available', 'downloading', 'downloaded'].includes(state.status)
+  const relevant = ['available', 'downloading', 'downloaded', 'manual'].includes(state.status)
   const open = relevant && !hidden
 
   return (
@@ -58,6 +58,23 @@ export function UpdateModal(): ReactNode {
               Restart now
             </Button>
           </>
+        ) : state.status === 'manual' ? (
+          <>
+            <Button icon={Clock} onClick={() => setHidden(true)}>
+              Later
+            </Button>
+            <Button
+              variant="primary"
+              icon={ExternalLink}
+              onClick={() =>
+                window.fvc.system.openExternal(
+                  'https://github.com/FvC-Launcher/FvC-Launcher/releases/latest'
+                )
+              }
+            >
+              Open GitHub release
+            </Button>
+          </>
         ) : undefined
       }
     >
@@ -70,6 +87,8 @@ export function UpdateModal(): ReactNode {
             {state.status === 'downloading' && `Downloading FvC Launcher ${state.version}…`}
             {state.status === 'downloaded' &&
               `FvC Launcher ${state.version} has been downloaded. Restart now to apply it, or it will install automatically when you close the launcher.`}
+            {state.status === 'manual' &&
+              `FvC Launcher ${state.version} is available. This .deb install can't update itself on Linux — grab the new version from GitHub (or switch to the AppImage build, which updates in place).`}
           </span>
         </div>
 
