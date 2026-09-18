@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { dirname, join, resolve, sep } from 'path'
+import { dirname, join } from 'path'
+import { safeInstancePath } from '../util/safePath'
 import AdmZip from 'adm-zip'
 import { paths } from '../paths'
 import { broadcast, notify } from '../broadcast'
@@ -38,15 +39,6 @@ function loaderFromDependencies(deps: Record<string, string>): {
   if (deps['neoforge']) return { loader: 'neoforge', loaderVersion: deps['neoforge'] }
   if (deps['forge']) return { loader: 'forge', loaderVersion: deps['forge'] }
   return { loader: 'vanilla' }
-}
-
-/** Resolve a manifest-relative path, refusing anything escaping the instance dir. */
-function safeInstancePath(instanceDir: string, relPath: string): string {
-  const target = resolve(instanceDir, relPath)
-  if (!target.startsWith(resolve(instanceDir) + sep)) {
-    throw new Error(`Modpack contains an unsafe file path: ${relPath}`)
-  }
-  return target
 }
 
 function sha1Of(filePath: string): string {

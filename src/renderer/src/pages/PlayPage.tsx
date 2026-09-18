@@ -140,6 +140,12 @@ export function PlayPage(): ReactNode {
             Minecraft {profile.minecraftVersion} · {LOADER_LABELS[profile.loader]}
             {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
           </p>
+          {profile.packSource && (
+            <p className="tiny" style={{ marginTop: 6 }} title={`github.com/${profile.packSource.repo}`}>
+              Auto-updates from GitHub
+              {profile.packSource.installedTag ? ` · ${profile.packSource.installedTag}` : ''}
+            </p>
+          )}
         </div>
 
         <AnimatePresence mode="wait">

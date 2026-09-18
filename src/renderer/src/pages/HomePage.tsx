@@ -112,20 +112,25 @@ export function HomePage(): ReactNode {
             <Newspaper size={18} style={{ color: 'var(--accent)' }} />
             <h2>Launcher news</h2>
           </div>
-          {news.map((item) => (
-            <article key={item.title} className="card" style={{ padding: 18 }}>
-              <div className="row between">
-                <h3>{item.title}</h3>
-                <span className="badge accent">{item.tag}</span>
-              </div>
-              <p className="muted" style={{ fontSize: '0.86rem', lineHeight: 1.55, marginTop: 6 }}>
-                {item.body}
-              </p>
-              <div className="tiny" style={{ marginTop: 10 }}>
-                {new Date(item.date).toLocaleDateString()}
-              </div>
-            </article>
-          ))}
+          <div
+            className="stack"
+            style={{ gap: 12, maxHeight: 520, overflowY: 'auto', paddingRight: 4 }}
+          >
+            {news.map((item) => (
+              <article key={item.title} className="card" style={{ padding: 18 }}>
+                <div className="row between">
+                  <h3>{item.title}</h3>
+                  <span className="badge accent">{item.tag}</span>
+                </div>
+                <p className="muted" style={{ fontSize: '0.86rem', lineHeight: 1.55, marginTop: 6 }}>
+                  {item.body}
+                </p>
+                <div className="tiny" style={{ marginTop: 10 }}>
+                  {new Date(item.date).toLocaleDateString()}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         {/* Recent profiles */}

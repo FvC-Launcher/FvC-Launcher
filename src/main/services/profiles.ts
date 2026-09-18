@@ -1,13 +1,14 @@
 import { dialog, shell, BrowserWindow } from 'electron'
 import { randomUUID } from 'crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import AdmZip from 'adm-zip'
 import { JsonStore } from '../store'
 import { paths } from '../paths'
 import { broadcast } from '../broadcast'
 import { CH, type CreateProfileInput } from '@shared/ipc'
-import type { Profile } from '@shared/types'
+import { safeInstancePath, normalizeGithubRepo } from '../util/safePath'
+import type { GithubExportOptions, Profile, ProfileExportMode } from '@shared/types'
 
 interface ProfilesFile {
   profiles: Profile[]
@@ -39,6 +40,41 @@ const INSTANCE_SUBDIRS = [
 function save(file: ProfilesFile): void {
   getStore().set(file)
   broadcast(CH.profilesChanged)
+}
+
+/**
+ * Writes every `instance/*` entry of a .fvcpack into the instance folder and
+ * returns the instance-relative paths the pack provides.
+ *
+ * In `update` mode the player's own state is preserved: options.txt is never
+ * touched and existing config files are left as they are (new config files
+ * from new mods are still added). Mods, resource packs and shader packs are
+ * written normally so the author can ship newer versions of them.
+ */
+export function applyPackFiles(
+  zip: AdmZip,
+  instanceDir: string,
+  opts: { onlyMods?: boolean; update?: boolean } = {}
+): string[] {
+  const written: string[] = []
+  for (const zipEntry of zip.getEntries()) {
+    if (!zipEntry.entryName.startsWith('instance/') || zipEntry.isDirectory) continue
+    const rel = zipEntry.entryName.slice('instance/'.length).replace(/\\/g, '/')
+    if (!rel) continue
+    if (opts.onlyMods && !rel.startsWith('mods/')) continue
+    const target = safeInstancePath(instanceDir, rel)
+    if (opts.update) {
+      if (rel === 'options.txt') continue
+      if (rel.startsWith('config/') && existsSync(target)) {
+        written.push(rel)
+        continue
+      }
+    }
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, zipEntry.getData())
+    written.push(rel)
+  }
+  return written
 }
 
 function ensureInstanceDirs(id: string): void {
@@ -137,10 +173,25 @@ export const profilesService = {
     await shell.openPath(paths.instance(id))
   },
 
-  /** Exports profile.json + instance folder into a .fvcpack zip. */
-  async export(id: string): Promise<string | null> {
+  /**
+   * Exports profile.json + instance folder into a .fvcpack zip.
+   * `mode === 'mods'` ships only the mods folder; `'everything'` also includes
+   * configs, resource/shader packs and options.txt.
+   */
+  async export(
+    id: string,
+    mode: ProfileExportMode = 'everything',
+    github?: GithubExportOptions
+  ): Promise<string | null> {
     const profile = this.get(id)
     if (!profile) throw new Error('Profile not found.')
+    let repo: string | null = null
+    if (github) {
+      repo = normalizeGithubRepo(github.repo)
+      if (!repo) {
+        throw new Error('Enter a valid GitHub repository link, e.g. https://github.com/owner/repo')
+      }
+    }
     const win = BrowserWindow.getFocusedWindow()
     const result = await dialog.showSaveDialog(win!, {
       title: 'Export profile',
@@ -149,20 +200,50 @@ export const profilesService = {
     })
     if (result.canceled || !result.filePath) return null
 
+    // Local-only bookkeeping never leaves this machine; the exported pack
+    // either carries a clean GitHub source or none at all.
+    const { packSource: _ps, ...exportable } = profile
+    const packed: Profile =
+      repo && github
+        ? {
+            ...exportable,
+            packSource: {
+              type: 'fvc-github-pack',
+              formatVersion: 1,
+              repo,
+              mode,
+              removeOld: github.removeOld
+            }
+          }
+        : exportable
     const zip = new AdmZip()
-    zip.addFile('profile.json', Buffer.from(JSON.stringify(profile, null, 2), 'utf-8'))
+    zip.addFile('profile.json', Buffer.from(JSON.stringify(packed, null, 2), 'utf-8'))
     const dir = paths.instance(id)
     // Exclude bulky, regenerable folders from exports.
     const skip = new Set(['saves', 'screenshots', 'logs'])
+    const subdirs = mode === 'mods' ? ['mods'] : INSTANCE_SUBDIRS.filter((s) => !skip.has(s))
     if (existsSync(dir)) {
-      for (const sub of INSTANCE_SUBDIRS.filter((s) => !skip.has(s))) {
+      for (const sub of subdirs) {
         const subPath = join(dir, sub)
         if (existsSync(subPath)) zip.addLocalFolder(subPath, `instance/${sub}`)
       }
       const optionsTxt = join(dir, 'options.txt')
-      if (existsSync(optionsTxt)) zip.addLocalFile(optionsTxt, 'instance')
+      if (mode === 'everything' && existsSync(optionsTxt)) zip.addLocalFile(optionsTxt, 'instance')
     }
     zip.writeZip(result.filePath)
+    // Remember the repo so the next export of this profile is pre-filled.
+    if (repo && github) {
+      this.update(id, {
+        packSource: {
+          ...(profile.packSource ?? {}),
+          type: 'fvc-github-pack',
+          formatVersion: 1,
+          repo,
+          mode,
+          removeOld: github.removeOld
+        }
+      })
+    }
     return result.filePath
   },
 
@@ -174,8 +255,18 @@ export const profilesService = {
       properties: ['openFile']
     })
     if (result.canceled || result.filePaths.length === 0) return null
+    return this.importFromFile(result.filePaths[0])
+  },
 
-    const zip = new AdmZip(result.filePaths[0])
+  /**
+   * Imports a .fvcpack from disk. `github` marks the new profile as backed by
+   * that repo/release even if the pack itself was exported without a source.
+   */
+  importFromFile(
+    filePath: string,
+    github?: { repo: string; releaseId: number; tag: string }
+  ): Profile {
+    const zip = new AdmZip(filePath)
     const entry = zip.getEntry('profile.json')
     if (!entry) throw new Error('Not a valid FvC profile pack (profile.json missing).')
     const imported = JSON.parse(zip.readAsText(entry)) as Profile
@@ -190,14 +281,24 @@ export const profilesService = {
       playTimeSeconds: 0
     }
     ensureInstanceDirs(profile.id)
-    const dest = paths.instance(profile.id)
-    for (const zipEntry of zip.getEntries()) {
-      if (zipEntry.entryName.startsWith('instance/') && !zipEntry.isDirectory) {
-        const rel = zipEntry.entryName.slice('instance/'.length)
-        const target = join(dest, rel)
-        mkdirSync(join(target, '..'), { recursive: true })
-        writeFileSync(target, zipEntry.getData())
+    const written = applyPackFiles(zip, paths.instance(profile.id))
+    const src = imported.packSource
+    const packRepo =
+      src && src.type === 'fvc-github-pack' && typeof src.repo === 'string' ? src.repo : null
+    if (packRepo || github) {
+      profile.packSource = {
+        type: 'fvc-github-pack',
+        formatVersion: 1,
+        // A pack fetched from GitHub follows the repo it was fetched from.
+        repo: github?.repo ?? packRepo!,
+        mode: src?.mode === 'mods' ? 'mods' : 'everything',
+        removeOld: src?.removeOld !== false,
+        installedReleaseId: github?.releaseId,
+        installedTag: github?.tag,
+        managedFiles: written
       }
+    } else {
+      delete profile.packSource
     }
     const file = getStore().get()
     save({ profiles: [...file.profiles, profile], selectedId: profile.id })

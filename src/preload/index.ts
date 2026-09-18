@@ -36,8 +36,9 @@ const api: FvcApi = {
     duplicate: (id) => ipcRenderer.invoke(CH.profilesDuplicate, id),
     remove: (id) => ipcRenderer.invoke(CH.profilesRemove, id),
     openFolder: (id) => ipcRenderer.invoke(CH.profilesOpenFolder, id),
-    exportProfile: (id) => ipcRenderer.invoke(CH.profilesExport, id),
+    exportProfile: (id, mode, github) => ipcRenderer.invoke(CH.profilesExport, id, mode, github),
     importProfile: () => ipcRenderer.invoke(CH.profilesImport),
+    importFromGithub: (repo) => ipcRenderer.invoke(CH.profilesImportGithub, repo),
     repair: (id) => ipcRenderer.invoke(CH.profilesRepair, id),
     getSelected: () => ipcRenderer.invoke(CH.profilesGetSelected),
     setSelected: (id) => ipcRenderer.invoke(CH.profilesSetSelected, id)
@@ -98,7 +99,8 @@ const api: FvcApi = {
   },
   modpacks: {
     install: (input) => ipcRenderer.invoke(CH.modpackInstall, input),
-    onProgress: (cb) => subscribe(CH.modpackProgress, cb)
+    onProgress: (cb) => subscribe(CH.modpackProgress, cb),
+    community: () => ipcRenderer.invoke(CH.modpackCommunity)
   },
   curseforge: {
     searchPacks: (params) => ipcRenderer.invoke(CH.cfSearch, params),

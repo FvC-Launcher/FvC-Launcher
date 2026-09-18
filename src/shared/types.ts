@@ -32,6 +32,47 @@ export interface Account {
 
 export type LoaderId = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'
 
+/** What an exported .fvcpack contains: only the mods folder, or the whole instance. */
+export type ProfileExportMode = 'mods' | 'everything'
+
+/**
+ * Written into profile.json of GitHub-backed packs so other clients recognise
+ * them and know where to fetch updates from (latest GitHub release).
+ */
+export interface GithubPackSource {
+  type: 'fvc-github-pack'
+  formatVersion: 1
+  /** "owner/repo" */
+  repo: string
+  mode: ProfileExportMode
+  /** Delete pack-managed files that are no longer in the new version. */
+  removeOld: boolean
+}
+
+/** A community pack found through the `fvc-modpack` GitHub topic. */
+export interface CommunityPack {
+  /** "owner/repo" */
+  repo: string
+  name: string
+  author: string
+  description?: string
+  /** Latest release tag. */
+  version: string
+  releaseId: number
+  loader?: LoaderId
+  minecraftVersion?: string
+  stars: number
+  updatedAt: string
+  url: string
+  sizeBytes: number
+}
+
+/** Options the author picks when exporting a GitHub-backed pack. */
+export interface GithubExportOptions {
+  repo: string
+  removeOld: boolean
+}
+
 export interface Profile {
   id: string
   name: string
@@ -49,6 +90,15 @@ export interface Profile {
   createdAt: string
   lastPlayed?: string
   playTimeSeconds: number
+  /** Present when this profile auto-updates from a GitHub release. */
+  packSource?: GithubPackSource & {
+    /** GitHub release id the current files match (local only, stripped on export). */
+    installedReleaseId?: number
+    /** Release tag matching installedReleaseId, for display. */
+    installedTag?: string
+    /** Instance-relative paths the pack installed (local only, stripped on export). */
+    managedFiles?: string[]
+  }
 }
 
 export interface InstalledContent {

@@ -6,6 +6,18 @@ import type { NewsItem } from '@shared/types'
  */
 const NEWS: NewsItem[] = [
   {
+    title: 'Online Modpacks added',
+    body: 'Profiles can now be exported as GitHub modpacks that update themselves: publish a new release with the .fvcpack attached and every player gets it automatically the next time they press Play, without losing their settings, configs, resource packs or shaders. Import a pack from a GitHub link, or use Browse Modpacks on the Profiles tab to discover community packs tagged fvc-modpack.',
+    date: '2026-09-18',
+    tag: 'Feature'
+  },
+  {
+    title: 'Historical Versions',
+    body: 'The profile creator now supports historical versions of Minecraft predating 1.0, allowing profiles to be created against early alpha and beta releases in addition to the standard release history.',
+    date: '2026-09-13',
+    tag: 'Feature'
+  },
+  {
     title: 'Welcome to FvC Launcher 1.0',
     body: 'Isolated profiles, Modrinth mod browsing with automatic dependencies, Microsoft & offline accounts, and a launch pipeline that verifies everything before starting the game.',
     date: '2026-07-15',

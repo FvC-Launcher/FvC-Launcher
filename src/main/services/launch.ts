@@ -6,6 +6,7 @@ import { paths } from '../paths'
 import { broadcast, notify } from '../broadcast'
 import { CH } from '@shared/ipc'
 import { profilesService } from './profiles'
+import { packUpdaterService } from './packUpdater'
 import { accountsService } from './accounts'
 import { settingsService } from './settings'
 import { downloadsService } from './downloads'
@@ -105,7 +106,7 @@ export const launchService = {
     if (state.phase === 'running' || state.phase === 'launching') {
       throw new Error('A game is already running.')
     }
-    const profile = profilesService.get(profileId)
+    let profile = profilesService.get(profileId)
     if (!profile) throw new Error('Profile not found.')
     const settings = settingsService.get()
     const accountId = accountsService.getActiveId()
@@ -114,7 +115,15 @@ export const launchService = {
     setState({ profileId, phase: 'verifying', detail: 'Preparing account…', progress: -1, error: undefined })
 
     try {
+      // 0. GitHub-backed packs must match the latest release before playing.
+      if (profile.packSource) {
+        profile = await packUpdaterService.ensureUpToDate(profile, (detail) =>
+          setState({ phase: 'verifying', detail })
+        )
+      }
+
       // 1. Account / session
+      setState({ phase: 'verifying', detail: 'Preparing account…' })
       const authorization = await accountsService.getLaunchAuth(accountId)
 
       // 2. Java — Auto picks (and downloads) the correct major for this MC

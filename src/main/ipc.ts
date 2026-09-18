@@ -7,6 +7,7 @@ import { paths } from './paths'
 import { settingsService } from './services/settings'
 import { accountsService } from './services/accounts'
 import { profilesService } from './services/profiles'
+import { packUpdaterService } from './services/packUpdater'
 import { contentService } from './services/content'
 import { modrinthService } from './services/modrinth'
 import { versionsService } from './services/versions'
@@ -75,8 +76,11 @@ export function registerIpc(): void {
   ipcMain.handle(CH.profilesDuplicate, (_e, id) => profilesService.duplicate(id))
   ipcMain.handle(CH.profilesRemove, (_e, id) => profilesService.remove(id))
   ipcMain.handle(CH.profilesOpenFolder, (_e, id) => profilesService.openFolder(id))
-  ipcMain.handle(CH.profilesExport, (_e, id) => profilesService.export(id))
+  ipcMain.handle(CH.profilesExport, (_e, id, mode, github) =>
+    profilesService.export(id, mode, github)
+  )
   ipcMain.handle(CH.profilesImport, () => profilesService.import())
+  ipcMain.handle(CH.profilesImportGithub, (_e, repo) => packUpdaterService.importFromGithub(repo))
   ipcMain.handle(CH.profilesRepair, (_e, id) => profilesService.repair(id))
   ipcMain.handle(CH.profilesGetSelected, () => profilesService.getSelectedId())
   ipcMain.handle(CH.profilesSetSelected, (_e, id) => profilesService.setSelected(id))
@@ -149,6 +153,7 @@ export function registerIpc(): void {
 
   // Modpacks
   ipcMain.handle(CH.modpackInstall, (_e, input) => modpacksService.install(input))
+  ipcMain.handle(CH.modpackCommunity, () => packUpdaterService.listCommunityPacks())
 
   // CurseForge
   ipcMain.handle(CH.cfSearch, (_e, params) => curseforgeService.searchPacks(params))

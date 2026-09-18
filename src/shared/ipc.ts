@@ -6,9 +6,11 @@
 import type {
   Account,
   AppSettings,
+  CommunityPack,
   ContentKind,
   CurseForgePack,
   DownloadTask,
+  GithubExportOptions,
   InstalledContent,
   JavaInstall,
   LaunchState,
@@ -23,6 +25,7 @@ import type {
   NewsItem,
   NotificationPayload,
   Profile,
+  ProfileExportMode,
   UpdaterState
 } from './types'
 
@@ -109,8 +112,14 @@ export interface FvcApi {
     duplicate(id: string): Promise<Profile>
     remove(id: string): Promise<void>
     openFolder(id: string): Promise<void>
-    exportProfile(id: string): Promise<string | null>
+    exportProfile(
+      id: string,
+      mode: ProfileExportMode,
+      github?: GithubExportOptions
+    ): Promise<string | null>
     importProfile(): Promise<Profile | null>
+    /** Downloads the latest release of a GitHub repo and imports its .fvcpack. */
+    importFromGithub(repo: string): Promise<Profile>
     repair(id: string): Promise<void>
     getSelected(): Promise<string | null>
     setSelected(id: string): Promise<void>
@@ -176,6 +185,8 @@ export interface FvcApi {
     /** Creates the profile from the pack manifest and installs its contents. */
     install(input: ModpackInstallInput): Promise<Profile>
     onProgress(cb: (p: ModpackProgress) => void): () => void
+    /** Repos tagged `fvc-modpack` on GitHub whose latest release has a .fvcpack. */
+    community(): Promise<CommunityPack[]>
   }
   curseforge: {
     /** Requires an API key in Settings; rejects with a friendly error otherwise. */
@@ -234,6 +245,7 @@ export const CH = {
   profilesOpenFolder: 'profiles:openFolder',
   profilesExport: 'profiles:export',
   profilesImport: 'profiles:import',
+  profilesImportGithub: 'profiles:importGithub',
   profilesRepair: 'profiles:repair',
   profilesGetSelected: 'profiles:getSelected',
   profilesSetSelected: 'profiles:setSelected',
@@ -282,6 +294,7 @@ export const CH = {
   newsLauncher: 'news:launcher',
 
   modpackInstall: 'modpacks:install',
+  modpackCommunity: 'modpacks:community',
   modpackProgress: 'modpacks:progress',
 
   cfSearch: 'curseforge:search',

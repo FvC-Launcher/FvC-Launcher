@@ -3,10 +3,15 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
+  Box,
   Clock,
+  Compass,
+  Code,
   Copy,
   Download,
   FolderOpen,
+  Github,
+  HardDrive,
   Image,
   MoreVertical,
   Package,
@@ -19,13 +24,14 @@ import {
   Upload,
   Wrench
 } from 'lucide-react'
-import { Button, ConfirmDialog, EmptyState, Input, Modal, Tabs } from '@/components/ui'
+import { Button, ConfirmDialog, EmptyState, Field, Input, Modal, Tabs, Toggle } from '@/components/ui'
 import { InstalledList } from '@/components/InstalledList'
 import { ModBrowser } from '@/components/ModBrowser'
 import { ProfileWizard } from '@/components/ProfileWizard'
 import { formatPlayTime, formatRelative, useApp } from '@/store'
+import { CommunityPacksModal } from '@/components/CommunityPacksModal'
 import { LOADER_LABELS, profileIcon } from '@/lib'
-import type { ContentKind, Profile } from '@shared/types'
+import type { ContentKind, Profile, ProfileExportMode } from '@shared/types'
 
 export function ProfilesPage(): ReactNode {
   const openProfileId = useApp((s) => s.openProfileId)
@@ -52,6 +58,15 @@ function ProfileGrid(): ReactNode {
   const [renameTarget, setRenameTarget] = useState<Profile | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [browseOpen, setBrowseOpen] = useState(false)
+  const [importRepo, setImportRepo] = useState<string | null>(null) // non-null = online step
+  const [importBusy, setImportBusy] = useState(false)
+  const [exportTarget, setExportTarget] = useState<Profile | null>(null)
+  // Set when one of the GitHub export buttons was picked; shows the repo step.
+  const [githubMode, setGithubMode] = useState<ProfileExportMode | null>(null)
+  const [githubRepo, setGithubRepo] = useState('')
+  const [githubRemoveOld, setGithubRemoveOld] = useState(true)
 
   useEffect(() => {
     if (!menu) return
@@ -88,6 +103,70 @@ function ProfileGrid(): ReactNode {
     }
   }
 
+  const closeImport = (): void => {
+    if (importBusy) return
+    setImportOpen(false)
+    setImportRepo(null)
+  }
+
+  const runManualImport = async (): Promise<void> => {
+    closeImport()
+    await act(async () => {
+      const imported = await window.fvc.profiles.importProfile()
+      if (imported?.packSource) {
+        pushNotification({
+          type: 'info',
+          title: `${imported.name} imported`,
+          body: `Auto-updates from github.com/${imported.packSource.repo}. The latest release is fetched when you press Play.`
+        })
+      }
+    })
+  }
+
+  const runOnlineImport = async (): Promise<void> => {
+    const repo = importRepo?.trim()
+    if (!repo) return
+    setImportBusy(true)
+    try {
+      await window.fvc.profiles.importFromGithub(repo)
+      setImportOpen(false)
+      setImportRepo(null)
+    } catch (err) {
+      // Keep the dialog open so the link can be corrected.
+      pushNotification({
+        type: 'error',
+        title: 'Import failed',
+        body: err instanceof Error ? err.message : String(err)
+      })
+    } finally {
+      setImportBusy(false)
+    }
+  }
+
+  const closeExport = (): void => {
+    setExportTarget(null)
+    setGithubMode(null)
+  }
+
+  const runExport = async (
+    mode: ProfileExportMode,
+    github?: { repo: string; removeOld: boolean }
+  ): Promise<void> => {
+    const target = exportTarget
+    if (!target) return
+    closeExport()
+    await act(async () => {
+      const path = await window.fvc.profiles.exportProfile(target.id, mode, github)
+      if (path) pushNotification({ type: 'success', title: 'Profile exported', body: path })
+    })
+  }
+
+  const pickGithub = (mode: ProfileExportMode): void => {
+    setGithubMode(mode)
+    setGithubRepo(exportTarget?.packSource?.repo ?? '')
+    setGithubRemoveOld(exportTarget?.packSource?.removeOld ?? true)
+  }
+
   const sorted = [...profiles].sort((a, b) => Number(b.favorite) - Number(a.favorite))
 
   return (
@@ -100,7 +179,10 @@ function ProfileGrid(): ReactNode {
           </div>
         </div>
         <div className="row" style={{ gap: 10 }}>
-          <Button icon={Upload} onClick={() => void act(() => window.fvc.profiles.importProfile())}>
+          <Button icon={Compass} onClick={() => setBrowseOpen(true)}>
+            Browse Modpacks
+          </Button>
+          <Button icon={Upload} onClick={() => { setImportRepo(null); setImportOpen(true) }}>
             Import
           </Button>
           <Button variant="primary" icon={Plus} onClick={() => setWizardOpen(true)}>
@@ -165,6 +247,14 @@ function ProfileGrid(): ReactNode {
                   <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <span className="badge accent">{profile.minecraftVersion}</span>
                     <span className="badge">{LOADER_LABELS[profile.loader]}</span>
+                    {profile.packSource && (
+                      <span
+                        className="badge"
+                        title={`Auto-updates from github.com/${profile.packSource.repo}${profile.packSource.installedTag ? ` · ${profile.packSource.installedTag}` : ''}`}
+                      >
+                        <Github size={11} /> Auto-update
+                      </span>
+                    )}
                   </div>
                   <div className="row" style={{ gap: 14, marginTop: 14 }}>
                     <span className="tiny row" style={{ gap: 5 }}>
@@ -237,14 +327,7 @@ function ProfileGrid(): ReactNode {
             <button onClick={() => void act(() => window.fvc.profiles.openFolder(menu.profile.id))}>
               <FolderOpen /> Open folder
             </button>
-            <button
-              onClick={() =>
-                void act(async () => {
-                  const path = await window.fvc.profiles.exportProfile(menu.profile.id)
-                  if (path) pushNotification({ type: 'success', title: 'Profile exported', body: path })
-                })
-              }
-            >
+            <button onClick={() => { setMenu(null); setExportTarget(menu.profile) }}>
               <Download /> Export
             </button>
             <button onClick={() => void act(() => window.fvc.profiles.repair(menu.profile.id), 'Profile will be re-verified on next launch')}>
@@ -287,6 +370,153 @@ function ProfileGrid(): ReactNode {
       >
         <div className="modal-body">
           <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
+        </div>
+      </Modal>
+
+      <CommunityPacksModal open={browseOpen} onClose={() => setBrowseOpen(false)} />
+
+      {/* Import dialog */}
+      <Modal
+        open={importOpen}
+        onClose={closeImport}
+        title={importRepo !== null ? 'Import from GitHub' : 'How do you want to import?'}
+        footer={
+          importRepo !== null ? (
+            <>
+              <Button disabled={importBusy} onClick={() => setImportRepo(null)}>
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                icon={Github}
+                loading={importBusy}
+                disabled={!importRepo.trim() || importBusy}
+                onClick={() => void runOnlineImport()}
+              >
+                Import
+              </Button>
+            </>
+          ) : undefined
+        }
+      >
+        <div className="modal-body">
+          {importRepo !== null ? (
+            <>
+              <Field label="GitHub repository link">
+                <Input
+                  autoFocus
+                  placeholder="https://github.com/owner/repo"
+                  value={importRepo}
+                  disabled={importBusy}
+                  onChange={(e) => setImportRepo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void runOnlineImport()
+                  }}
+                />
+              </Field>
+              <div className="tiny">
+                The latest release of this repository is downloaded and imported as a new profile.
+                Future releases install automatically when you press Play.
+              </div>
+            </>
+          ) : (
+            <div className="export-choices">
+              <button className="export-choice" onClick={() => void runManualImport()}>
+                <span className="export-choice-icon"><HardDrive size={30} /></span>
+                <span className="export-choice-title">Manual Import</span>
+                <span className="export-choice-desc">Import a .fvcpack file from this computer</span>
+              </button>
+              <button className="export-choice" onClick={() => setImportRepo('')}>
+                <span className="export-choice-icon"><Github size={30} /></span>
+                <span className="export-choice-title">Online Import</span>
+                <span className="export-choice-desc">Paste a GitHub repo link to download the pack</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Export dialog */}
+      <Modal
+        open={exportTarget !== null}
+        onClose={closeExport}
+        title={githubMode ? 'Link a GitHub repository' : 'What files do you want to export?'}
+        footer={
+          githubMode ? (
+            <>
+              <Button onClick={() => setGithubMode(null)}>Back</Button>
+              <Button
+                variant="primary"
+                icon={Github}
+                disabled={!githubRepo.trim()}
+                onClick={() =>
+                  void runExport(githubMode, { repo: githubRepo.trim(), removeOld: githubRemoveOld })
+                }
+              >
+                Export
+              </Button>
+            </>
+          ) : undefined
+        }
+      >
+        <div className="modal-body">
+          {githubMode ? (
+            <>
+              <Field label="GitHub repository link">
+                <Input
+                  autoFocus
+                  placeholder="https://github.com/owner/repo"
+                  value={githubRepo}
+                  onChange={(e) => setGithubRepo(e.target.value)}
+                />
+              </Field>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                    Remove mods that are no longer in the pack
+                  </div>
+                  <div className="tiny">Mods players added themselves are never touched.</div>
+                </div>
+                <Toggle checked={githubRemoveOld} onChange={setGithubRemoveOld} />
+              </div>
+              <div className="tiny">
+                After exporting, create a new release in this repository and attach the .fvcpack
+                file. Players get it automatically the next time they press Play.
+                {githubMode === 'mods' ? ' Only the mods folder is included.' : ''}
+              </div>
+            </>
+          ) : (
+            <div className="export-choices">
+              <button className="export-choice" onClick={() => void runExport('mods')}>
+                <span className="export-choice-icon"><Code size={30} /></span>
+                <span className="export-choice-title">Only Mods</span>
+                <span className="export-choice-desc">
+                  Will not export texture packs, settings or configs
+                </span>
+              </button>
+              <button className="export-choice" onClick={() => void runExport('everything')}>
+                <span className="export-choice-icon"><Box size={30} /></span>
+                <span className="export-choice-title">Everything</span>
+                <span className="export-choice-desc">
+                  Will export everything: mods, texture packs, settings etc.
+                </span>
+              </button>
+              <button className="export-choice" onClick={() => pickGithub('mods')}>
+                <span className="export-choice-icon"><Github size={30} /></span>
+                <span className="export-choice-title">GitHub · Only Mods</span>
+                <span className="export-choice-desc">
+                  Players automatically get new mods from your GitHub releases
+                </span>
+              </button>
+              <button className="export-choice" onClick={() => pickGithub('everything')}>
+                <span className="export-choice-icon"><Github size={30} /></span>
+                <span className="export-choice-title">GitHub · Everything</span>
+                <span className="export-choice-desc">
+                  Players automatically get mods, texture packs and settings from your releases
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -360,6 +590,14 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
               {LOADER_LABELS[profile.loader]}
               {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
             </span>
+            {profile.packSource && (
+              <span
+                className="badge"
+                title={`Auto-updates from github.com/${profile.packSource.repo}`}
+              >
+                <Github size={11} /> {profile.packSource.installedTag ?? 'Auto-update'}
+              </span>
+            )}
             <span className="badge">
               <Timer size={11} /> {formatPlayTime(profile.playTimeSeconds)}
             </span>
