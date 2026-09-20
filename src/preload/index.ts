@@ -94,6 +94,9 @@ const api: FvcApi = {
     appVersion: () => ipcRenderer.invoke(CH.sysAppVersion),
     platform: process.platform
   },
+  skins: {
+    resolve: (query) => ipcRenderer.invoke(CH.skinsResolve, query)
+  },
   news: {
     launcher: () => ipcRenderer.invoke(CH.newsLauncher)
   },

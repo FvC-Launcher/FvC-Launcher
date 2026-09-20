@@ -14,6 +14,7 @@ import { ProfilesPage } from '@/pages/ProfilesPage'
 import { ModsPage } from '@/pages/ModsPage'
 import { DownloadsPage } from '@/pages/DownloadsPage'
 import { AccountsPage } from '@/pages/AccountsPage'
+import { SkinPage } from '@/pages/SkinPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { AboutPage } from '@/pages/AboutPage'
 
@@ -24,6 +25,7 @@ const PAGES = {
   mods: ModsPage,
   downloads: DownloadsPage,
   accounts: AccountsPage,
+  skin: SkinPage,
   settings: SettingsPage,
   about: AboutPage
 } as const

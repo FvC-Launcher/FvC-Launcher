@@ -9,6 +9,7 @@ export type Page =
   | 'mods'
   | 'downloads'
   | 'accounts'
+  | 'skin'
   | 'settings'
   | 'about'
 
@@ -26,6 +27,27 @@ export interface Account {
   /** True when the stored session failed to refresh and needs re-login. */
   needsRelogin?: boolean
   addedAt: string
+}
+
+// ------------------------------------- Skins -------------------------------
+
+/** Arm width of the player model: 4px (Steve) or 3px (Alex). */
+export type SkinModel = 'classic' | 'slim'
+
+/** A skin texture resolved by main, ready for the renderer to draw. */
+export interface ResolvedSkin {
+  /** The raw 64x64 (or legacy 64x32) skin texture as a data: URL. */
+  dataUrl: string
+  model: SkinModel
+  /** How the user asked for it. */
+  source: 'username' | 'url'
+  /** Canonical Mojang name/uuid when resolved from a username. */
+  username?: string
+  uuid?: string
+  /** Where the texture was actually downloaded from. */
+  textureUrl: string
+  /** True when the player has no custom skin and this is the Mojang default. */
+  isDefault?: boolean
 }
 
 // ----------------------------------- Profiles ------------------------------

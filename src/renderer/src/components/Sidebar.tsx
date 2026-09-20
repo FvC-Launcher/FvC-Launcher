@@ -8,6 +8,7 @@ import {
   Package,
   Play,
   Settings,
+  Shirt,
   User,
   type LucideIcon
 } from 'lucide-react'
@@ -20,7 +21,8 @@ const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'profiles', label: 'Profiles', icon: Layers },
   { page: 'mods', label: 'Mods', icon: Package },
   { page: 'downloads', label: 'Downloads', icon: Download },
-  { page: 'accounts', label: 'Accounts', icon: User }
+  { page: 'accounts', label: 'Accounts', icon: User },
+  { page: 'skin', label: 'Skin', icon: Shirt }
 ]
 
 const NAV_BOTTOM: { page: Page; label: string; icon: LucideIcon }[] = [

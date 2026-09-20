@@ -1121,3 +1121,116 @@ textarea {
   padding-left: 22px;
   margin: 8px 0;
 }
+
+/* Skin page */
+.skin-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .skin-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.skin-stage {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.skin-stage-body {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  padding: 28px 20px;
+  background:
+    radial-gradient(60% 55% at 50% 42%, rgba(var(--accent-rgb), 0.16), transparent 70%),
+    var(--bg-2);
+}
+.skin-canvas {
+  image-rendering: pixelated;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.45));
+}
+.skin-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+.skin-placeholder svg {
+  width: 46px;
+  height: 46px;
+  opacity: 0.45;
+}
+.skin-stage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.skin-panel {
+  padding: 16px 18px;
+}
+.skin-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  font-size: 0.92rem;
+  margin-bottom: 6px;
+}
+.skin-panel .input {
+  flex: 1;
+}
+.skin-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  color: var(--text-3);
+}
+.skin-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.32);
+  color: var(--error);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.skin-error svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.dev-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-3);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.dev-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-2);
+}
+.dev-note strong {
+  color: var(--text-2);
+}

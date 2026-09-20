@@ -26,6 +26,7 @@ import type {
   NotificationPayload,
   Profile,
   ProfileExportMode,
+  ResolvedSkin,
   UpdaterState
 } from './types'
 
@@ -178,6 +179,10 @@ export interface FvcApi {
     appVersion(): Promise<string>
     platform: string
   }
+  skins: {
+    /** Resolve a Minecraft username or a direct skin PNG link to a texture. */
+    resolve(query: string): Promise<ResolvedSkin>
+  }
   news: {
     launcher(): Promise<NewsItem[]>
   }
@@ -292,6 +297,8 @@ export const CH = {
   sysAppVersion: 'system:appVersion',
 
   newsLauncher: 'news:launcher',
+
+  skinsResolve: 'skins:resolve',
 
   modpackInstall: 'modpacks:install',
   modpackCommunity: 'modpacks:community',

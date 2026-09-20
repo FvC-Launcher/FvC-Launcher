@@ -15,6 +15,7 @@ import { javaService } from './services/java'
 import { launchService } from './services/launch'
 import { downloadsService } from './services/downloads'
 import { newsService } from './services/news'
+import { skinsService } from './services/skins'
 import { modpacksService } from './services/modpacks'
 import { curseforgeService } from './services/curseforge'
 import { legalService } from './services/legal'
@@ -150,6 +151,9 @@ export function registerIpc(): void {
 
   // News
   ipcMain.handle(CH.newsLauncher, () => newsService.launcher())
+
+  // Skins
+  ipcMain.handle(CH.skinsResolve, (_e, query) => skinsService.resolve(query))
 
   // Modpacks
   ipcMain.handle(CH.modpackInstall, (_e, input) => modpacksService.install(input))
