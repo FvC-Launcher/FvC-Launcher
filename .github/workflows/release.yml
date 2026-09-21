@@ -51,6 +51,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Bundled into resources/ and copied into every Fabric 26.2 instance.
+      - name: Build FvC Skins mod
+        run: npm run build:mod
+
       - name: Type check
         run: npm run typecheck
 

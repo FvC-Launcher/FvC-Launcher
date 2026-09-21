@@ -1,0 +1,12 @@
+# Deploy:
+#   npx wrangler login
+#   npx wrangler kv namespace create SKINS    -> paste the printed id below
+#   npx wrangler deploy                       -> put the printed URL in SKIN_SERVER_URL
+#                                                (src/main/services/skins.ts)
+name = "fvc-skins"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "SKINS"
+id = "98de80b181884cdcab861baa0a12b9f0"

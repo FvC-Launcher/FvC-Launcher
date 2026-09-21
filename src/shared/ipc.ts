@@ -6,6 +6,7 @@
 import type {
   Account,
   AppSettings,
+  AppliedSkin,
   CommunityPack,
   ContentKind,
   CurseForgePack,
@@ -27,6 +28,7 @@ import type {
   Profile,
   ProfileExportMode,
   ResolvedSkin,
+  SkinModel,
   UpdaterState
 } from './types'
 
@@ -182,6 +184,11 @@ export interface FvcApi {
   skins: {
     /** Resolve a Minecraft username or a direct skin PNG link to a texture. */
     resolve(query: string): Promise<ResolvedSkin>
+    /** The skin applied to an offline account, if any. */
+    getApplied(accountId: string): Promise<AppliedSkin | null>
+    /** Saves the skin for an offline account and uploads it to the skin server. */
+    apply(accountId: string, dataUrl: string, model: SkinModel): Promise<AppliedSkin>
+    remove(accountId: string): Promise<void>
   }
   news: {
     launcher(): Promise<NewsItem[]>
@@ -299,6 +306,9 @@ export const CH = {
   newsLauncher: 'news:launcher',
 
   skinsResolve: 'skins:resolve',
+  skinsGetApplied: 'skins:getApplied',
+  skinsApply: 'skins:apply',
+  skinsRemove: 'skins:remove',
 
   modpackInstall: 'modpacks:install',
   modpackCommunity: 'modpacks:community',

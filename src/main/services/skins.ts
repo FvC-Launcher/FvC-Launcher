@@ -1,7 +1,24 @@
-import type { ResolvedSkin, SkinModel } from '@shared/types'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { randomBytes } from 'crypto'
+import { JsonStore } from '../store'
+import { paths } from '../paths'
+import { accountsService } from './accounts'
+import type { AppliedSkin, Profile, ResolvedSkin, SkinModel } from '@shared/types'
 
 /**
- * Skin lookup for the (work-in-progress) Skin page.
+ * The deployed skin-server/ Worker, without a trailing slash. While empty,
+ * applied skins still show for yourself in game but aren't shared.
+ */
+const SKIN_SERVER_URL = 'https://fvc-skins.fvcskins.workers.dev'
+
+const MOD_FILE = 'fvc-skins.jar'
+const BUNDLED_MOD = join(__dirname, '../../resources/mods', MOD_FILE)
+/** The skin server's limit; real skins are a few KB. */
+const MAX_APPLIED_BYTES = 64 * 1024
+
+/**
+ * Skin lookup for the Skin page, and applying skins to offline accounts.
  *
  * Everything is fetched here rather than in the renderer: the renderer's CSP
  * only allows connecting to Modrinth, and drawing a remote texture onto a
@@ -113,7 +130,189 @@ async function resolveUrl(url: string): Promise<ResolvedSkin> {
   }
 }
 
+interface AppliedRecord {
+  model: SkinModel
+  appliedAt: string
+  shared: boolean
+}
+
+interface SkinsFile {
+  /** Proves to the skin server that this install owns the names it uploaded. */
+  secret: string
+  applied: Record<string, AppliedRecord>
+}
+
+let store: JsonStore<SkinsFile> | null = null
+
+function getStore(): JsonStore<SkinsFile> {
+  if (!store) {
+    store = new JsonStore<SkinsFile>(paths.file('skins.json'), { secret: '', applied: {} })
+    if (!store.get().secret) {
+      store.set({ ...store.get(), secret: randomBytes(32).toString('hex') })
+    }
+  }
+  return store
+}
+
+function skinFile(accountId: string): string {
+  return join(paths.userData, 'skins', `${accountId}.png`)
+}
+
+function saveRecord(accountId: string, record: AppliedRecord | null): void {
+  const file = getStore().get()
+  const applied = { ...file.applied }
+  if (record) applied[accountId] = record
+  else delete applied[accountId]
+  getStore().set({ ...file, applied })
+}
+
+function offlineAccount(accountId: string): { username: string } {
+  const account = accountsService.list().find((a) => a.id === accountId)
+  if (!account) throw new Error('Account not found.')
+  if (account.type !== 'offline') {
+    throw new Error('Skins can only be applied to offline accounts.')
+  }
+  return account
+}
+
+class NameTakenError extends Error {}
+
+async function serverRequest(
+  method: 'PUT' | 'DELETE',
+  username: string,
+  body?: { png: Buffer; model: SkinModel }
+): Promise<void> {
+  const res = await fetch(`${SKIN_SERVER_URL}/skins/${encodeURIComponent(username)}`, {
+    method,
+    headers: {
+      'User-Agent': UA,
+      Authorization: `Bearer ${getStore().get().secret}`,
+      ...(body ? { 'Content-Type': 'image/png', 'X-Skin-Model': body.model } : {})
+    },
+    body: body ? new Uint8Array(body.png) : undefined,
+    signal: AbortSignal.timeout(10_000)
+  })
+  if (res.status === 403) {
+    throw new NameTakenError(
+      `The name "${username}" is already used by another FvC Launcher player on the skin server. ` +
+        'Use an offline account with a different name.'
+    )
+  }
+  if (!res.ok) throw new Error(`Skin server error ${res.status}: ${await res.text()}`)
+}
+
+/** Uploads when possible; returns whether other players can now see the skin. */
+async function share(username: string, png: Buffer, model: SkinModel): Promise<boolean> {
+  if (!SKIN_SERVER_URL) return false
+  try {
+    await serverRequest('PUT', username, { png, model })
+    return true
+  } catch (err) {
+    if (err instanceof NameTakenError) throw err
+    console.warn('[skins] upload failed:', err)
+    return false
+  }
+}
+
 export const skinsService = {
+  getApplied(accountId: string): AppliedSkin | null {
+    const record = getStore().get().applied[accountId]
+    const file = skinFile(accountId)
+    if (!record || !existsSync(file)) return null
+    return {
+      accountId,
+      dataUrl: `data:image/png;base64,${readFileSync(file).toString('base64')}`,
+      model: record.model,
+      appliedAt: record.appliedAt,
+      shared: record.shared
+    }
+  },
+
+  async apply(accountId: string, dataUrl: string, model: SkinModel): Promise<AppliedSkin> {
+    const { username } = offlineAccount(accountId)
+    const match = /^data:image\/png;base64,(.+)$/.exec(dataUrl)
+    if (!match) throw new Error('That skin is not a PNG image.')
+    const png = Buffer.from(match[1], 'base64')
+    if (png.byteLength > MAX_APPLIED_BYTES) throw new Error('That skin file is too large (max 64 KB).')
+    const { width, height } = pngSize(png)
+    if (width !== 64 || (height !== 64 && height !== 32)) {
+      throw new Error(`A skin must be 64x64 (or 64x32), but that image is ${width}x${height}.`)
+    }
+
+    const shared = await share(username, png, model)
+    mkdirSync(join(paths.userData, 'skins'), { recursive: true })
+    writeFileSync(skinFile(accountId), png)
+    saveRecord(accountId, { model, appliedAt: new Date().toISOString(), shared })
+    return this.getApplied(accountId)!
+  },
+
+  async remove(accountId: string): Promise<void> {
+    const account = accountsService.list().find((a) => a.id === accountId)
+    if (SKIN_SERVER_URL && account) {
+      await serverRequest('DELETE', account.username).catch((err) =>
+        console.warn('[skins] delete failed:', err)
+      )
+    }
+    this.forget(accountId)
+  },
+
+  /** Drops the local copy only (the account itself is gone). */
+  forget(accountId: string): void {
+    rmSync(skinFile(accountId), { force: true })
+    saveRecord(accountId, null)
+  },
+
+  /**
+   * Before launch: Fabric 26.2 instances get the bundled FvC Skins mod plus its
+   * config (the active account's name and applied skin); any other instance
+   * gets the mod removed so a version change can't leave an incompatible jar.
+   */
+  async prepareInstance(profile: Profile, accountId: string): Promise<void> {
+    const gameDir = paths.instance(profile.id)
+    const modsDir = join(gameDir, 'mods')
+    const modPath = join(modsDir, MOD_FILE)
+
+    if (profile.loader !== 'fabric' || profile.minecraftVersion !== '26.2') {
+      rmSync(modPath, { force: true })
+      rmSync(`${modPath}.disabled`, { force: true })
+      return
+    }
+    if (!existsSync(BUNDLED_MOD)) {
+      console.warn(`[skins] ${BUNDLED_MOD} is missing; run "npm run build:mod".`)
+      return
+    }
+    // A disabled copy means the player turned the mod off in the mods list.
+    if (!existsSync(`${modPath}.disabled`)) {
+      mkdirSync(modsDir, { recursive: true })
+      writeFileSync(modPath, readFileSync(BUNDLED_MOD))
+    }
+
+    const account = accountsService.list().find((a) => a.id === accountId)
+    const applied = account?.type === 'offline' ? this.getApplied(accountId) : null
+    const configDir = join(gameDir, 'config')
+    const skinDir = join(configDir, 'fvc-skins')
+    mkdirSync(skinDir, { recursive: true })
+
+    if (applied && account) {
+      const png = readFileSync(skinFile(accountId))
+      writeFileSync(join(skinDir, 'skin.png'), png)
+      if (!applied.shared) {
+        const shared = await share(account.username, png, applied.model).catch(() => false)
+        if (shared) saveRecord(accountId, { ...getStore().get().applied[accountId], shared })
+      }
+    } else {
+      rmSync(join(skinDir, 'skin.png'), { force: true })
+    }
+
+    const config = {
+      serverUrl: SKIN_SERVER_URL || null,
+      username: account?.username ?? null,
+      skin: Boolean(applied),
+      model: applied?.model ?? 'classic'
+    }
+    writeFileSync(join(configDir, 'fvc-skins.json'), JSON.stringify(config, null, 2), 'utf-8')
+  },
+
   /** Accepts a direct https:// link to a skin PNG, or a Minecraft username. */
   async resolve(query: string): Promise<ResolvedSkin> {
     const trimmed = query.trim()

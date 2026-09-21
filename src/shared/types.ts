@@ -39,8 +39,8 @@ export interface ResolvedSkin {
   /** The raw 64x64 (or legacy 64x32) skin texture as a data: URL. */
   dataUrl: string
   model: SkinModel
-  /** How the user asked for it. */
-  source: 'username' | 'url'
+  /** How the user asked for it, or 'applied' for the account's current skin. */
+  source: 'username' | 'url' | 'applied'
   /** Canonical Mojang name/uuid when resolved from a username. */
   username?: string
   uuid?: string
@@ -48,6 +48,16 @@ export interface ResolvedSkin {
   textureUrl: string
   /** True when the player has no custom skin and this is the Mojang default. */
   isDefault?: boolean
+}
+
+/** The skin an offline account wears in game through the bundled FvC Skins mod. */
+export interface AppliedSkin {
+  accountId: string
+  dataUrl: string
+  model: SkinModel
+  appliedAt: string
+  /** False while the skin server doesn't have it yet, so only you can see it. */
+  shared: boolean
 }
 
 // ----------------------------------- Profiles ------------------------------

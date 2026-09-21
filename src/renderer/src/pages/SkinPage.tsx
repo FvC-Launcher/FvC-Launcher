@@ -10,12 +10,13 @@ import {
   RotateCw,
   Search,
   Shirt,
-  Wrench
+  Trash2,
+  UserCheck
 } from 'lucide-react'
 import { Button, Input, Toggle } from '@/components/ui'
 import { SkinViewer } from '@/components/SkinViewer'
 import { useApp } from '@/store'
-import type { ResolvedSkin, SkinModel } from '@shared/types'
+import type { AppliedSkin, ResolvedSkin, SkinModel } from '@shared/types'
 
 /** Remembered across navigations and restarts — the lookup itself is cheap. */
 const STORAGE_KEY = 'fvc.skin.query'
@@ -32,6 +33,7 @@ export function SkinPage(): ReactNode {
   const accounts = useApp((s) => s.accounts)
   const activeId = useApp((s) => s.activeAccountId)
   const navigate = useApp((s) => s.navigate)
+  const pushNotification = useApp((s) => s.pushNotification)
 
   const [query, setQuery] = useState(readStoredQuery)
   const [skin, setSkin] = useState<ResolvedSkin | null>(null)
@@ -40,11 +42,81 @@ export function SkinPage(): ReactNode {
   const [showOverlay, setShowOverlay] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [applied, setApplied] = useState<AppliedSkin | null>(null)
+  const [applying, setApplying] = useState(false)
   const restored = useRef(false)
 
   const activeAccount = accounts.find((a) => a.id === activeId) ?? null
   const isMicrosoft = activeAccount?.type === 'microsoft'
+  const isOffline = activeAccount?.type === 'offline'
   const hasOffline = accounts.some((a) => a.type === 'offline')
+
+  useEffect(() => {
+    setApplied(null)
+    if (!activeAccount || activeAccount.type !== 'offline') return
+    let cancelled = false
+    void window.fvc.skins.getApplied(activeAccount.id).then((s) => !cancelled && setApplied(s))
+    return () => {
+      cancelled = true
+    }
+  }, [activeAccount?.id, activeAccount?.type])
+
+  const showApplied = (s: AppliedSkin): void => {
+    setSkin({
+      dataUrl: s.dataUrl,
+      model: s.model,
+      source: 'applied',
+      username: activeAccount?.username,
+      textureUrl: `applied:${s.appliedAt}`
+    })
+    setModel(s.model)
+    setError(null)
+  }
+
+  const apply = async (): Promise<void> => {
+    if (!skin || !activeAccount) return
+    setApplying(true)
+    try {
+      const result = await window.fvc.skins.apply(activeAccount.id, skin.dataUrl, model)
+      setApplied(result)
+      pushNotification(
+        result.shared
+          ? {
+              type: 'success',
+              title: 'Skin applied',
+              body: `${activeAccount.username} will wear it on Fabric 26.2 profiles.`
+            }
+          : {
+              type: 'warning',
+              title: 'Skin applied, not shared yet',
+              body: 'You will see it in game, but the skin server could not be reached, so other players can’t yet. It will retry at the next launch.'
+            }
+      )
+    } catch (err) {
+      pushNotification({
+        type: 'error',
+        title: 'Could not apply skin',
+        body: err instanceof Error ? err.message : String(err)
+      })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const removeApplied = async (): Promise<void> => {
+    if (!activeAccount) return
+    setApplying(true)
+    try {
+      await window.fvc.skins.remove(activeAccount.id)
+      setApplied(null)
+      pushNotification({ type: 'info', title: 'Skin removed', body: `${activeAccount.username} is back to the default skin.` })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const alreadyApplied =
+    !!skin && !!applied && skin.dataUrl === applied.dataUrl && model === applied.model
 
   const load = async (raw: string): Promise<void> => {
     const trimmed = raw.trim()
@@ -84,7 +156,8 @@ export function SkinPage(): ReactNode {
         <div>
           <h1>Skin</h1>
           <div className="subtitle">
-            Preview any Minecraft skin from a player name or a direct texture link.
+            Pick a skin from a player name or a direct texture link, then apply it to your offline
+            account.
           </div>
         </div>
       </div>
@@ -94,7 +167,8 @@ export function SkinPage(): ReactNode {
         <div>
           This feature is only available for <strong>Offline accounts</strong> — not Microsoft
           accounts. A Microsoft account always loads its skin from its Mojang profile, so change it
-          on minecraft.net instead.
+          on minecraft.net instead. Applied skins show in game on <strong>Fabric 26.2</strong>{' '}
+          profiles, and other FvC Launcher players on the same server see them too.
           {isMicrosoft && (
             <>
               {' '}
@@ -153,7 +227,11 @@ export function SkinPage(): ReactNode {
                   </div>
                   <div className="tiny" style={{ marginTop: 3 }}>
                     {view === 'front' ? 'Front view' : 'Back view'} ·{' '}
-                    {skin.source === 'url' ? 'from link' : 'from Mojang'}
+                    {skin.source === 'applied'
+                      ? 'currently applied'
+                      : skin.source === 'url'
+                        ? 'from link'
+                        : 'from Mojang'}
                   </div>
                 </>
               ) : (
@@ -251,30 +329,58 @@ export function SkinPage(): ReactNode {
             <div className="skin-panel-title">
               <Shirt size={15} /> Apply
             </div>
-            <p className="tiny" style={{ lineHeight: 1.5 }}>
-              {hasOffline
-                ? 'Applying a skin to an offline session is not wired up yet.'
-                : 'There is no offline account yet — add one on the Accounts page.'}
-            </p>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <Button variant="primary" icon={Shirt} disabled title="Not available yet">
-                Apply to account
-              </Button>
-              {!hasOffline && (
-                <Button icon={ExternalLink} onClick={() => navigate('accounts')}>
-                  Accounts
-                </Button>
-              )}
-            </div>
+            {isOffline ? (
+              <>
+                <p className="tiny" style={{ lineHeight: 1.5 }}>
+                  {applied ? (
+                    <>
+                      <strong>{activeAccount.username}</strong> is wearing a custom skin
+                      {applied.shared ? ', visible to other FvC Launcher players.' : ' that only you can see for now.'}
+                    </>
+                  ) : (
+                    <>
+                      <strong>{activeAccount.username}</strong> uses the default skin. Apply the
+                      previewed skin to wear it in game.
+                    </>
+                  )}
+                </p>
+                <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="primary"
+                    icon={Shirt}
+                    loading={applying}
+                    disabled={!skin || alreadyApplied}
+                    onClick={() => void apply()}
+                  >
+                    {alreadyApplied ? 'Applied' : `Apply to ${activeAccount.username}`}
+                  </Button>
+                  {applied && (
+                    <>
+                      <Button icon={UserCheck} onClick={() => showApplied(applied)}>
+                        Show current
+                      </Button>
+                      <Button icon={Trash2} disabled={applying} onClick={() => void removeApplied()}>
+                        Remove
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="tiny" style={{ lineHeight: 1.5 }}>
+                  {hasOffline
+                    ? 'Select an offline account on the Accounts page to apply a skin to it.'
+                    : 'There is no offline account yet — add one on the Accounts page.'}
+                </p>
+                <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                  <Button icon={ExternalLink} onClick={() => navigate('accounts')}>
+                    Accounts
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      </div>
-
-      <div className="dev-note">
-        <Wrench size={15} />
-        <div>
-          <strong>Still in development.</strong> This page is only a placeholder for now — skins can
-          be looked up and previewed, but applying one to an account does nothing yet.
         </div>
       </div>
     </>

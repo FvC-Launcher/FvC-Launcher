@@ -46,7 +46,10 @@ export function registerIpc(): void {
   ipcMain.handle(CH.accountsAddOffline, (_e, username) => accountsService.addOffline(username))
   ipcMain.handle(CH.accountsLoginMs, () => accountsService.loginMicrosoft())
   ipcMain.handle(CH.accountsRefresh, (_e, id) => accountsService.refresh(id))
-  ipcMain.handle(CH.accountsRemove, (_e, id) => accountsService.remove(id))
+  ipcMain.handle(CH.accountsRemove, (_e, id) => {
+    accountsService.remove(id)
+    skinsService.forget(id)
+  })
 
   // Profiles
   ipcMain.handle(CH.profilesList, () => profilesService.list())
@@ -154,6 +157,11 @@ export function registerIpc(): void {
 
   // Skins
   ipcMain.handle(CH.skinsResolve, (_e, query) => skinsService.resolve(query))
+  ipcMain.handle(CH.skinsGetApplied, (_e, accountId) => skinsService.getApplied(accountId))
+  ipcMain.handle(CH.skinsApply, (_e, accountId, dataUrl, model) =>
+    skinsService.apply(accountId, dataUrl, model)
+  )
+  ipcMain.handle(CH.skinsRemove, (_e, accountId) => skinsService.remove(accountId))
 
   // Modpacks
   ipcMain.handle(CH.modpackInstall, (_e, input) => modpacksService.install(input))

@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+resources/mods/
 *.log
 .DS_Store
 .claude/settings.local.json

@@ -11,6 +11,7 @@ import { accountsService } from './accounts'
 import { settingsService } from './settings'
 import { downloadsService } from './downloads'
 import { javaService, requiredJavaMajor } from './java'
+import { skinsService } from './skins'
 import type { LaunchState, LoaderId, Profile } from '@shared/types'
 
 let state: LaunchState = {
@@ -152,6 +153,11 @@ export const launchService = {
       } else if (profile.loader === 'forge' || profile.loader === 'neoforge') {
         setState({ phase: 'loader', detail: `Fetching ${loaderLabel(profile.loader)} installer…` })
         forgeInstaller = await downloadForgeInstaller(profile)
+      }
+      try {
+        await skinsService.prepareInstance(profile, accountId)
+      } catch (err) {
+        log(`[FvC] Could not set up FvC Skins: ${err instanceof Error ? err.message : String(err)}`)
       }
 
       // 4. Launch via MCLC (it verifies/downloads vanilla files itself)
