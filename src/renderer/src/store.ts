@@ -41,7 +41,8 @@ interface AppState {
   profiles: Profile[]
   selectedProfileId: string | null
   downloads: DownloadTask[]
-  launch: LaunchState
+  /** Every game currently preparing, running, or just finished. */
+  launches: LaunchState[]
   totalRamMb: number
 
   notifications: Notification[]
@@ -77,7 +78,7 @@ export const useApp = create<AppState>((set, get) => ({
   profiles: [],
   selectedProfileId: null,
   downloads: [],
-  launch: { profileId: null, phase: 'idle', detail: '', progress: -1 },
+  launches: [],
   totalRamMb: 8192,
 
   notifications: [],
@@ -119,20 +120,20 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   init: async () => {
-    const [settings, launch, downloads, totalRamMb, legal] = await Promise.all([
+    const [settings, launches, downloads, totalRamMb, legal] = await Promise.all([
       window.fvc.settings.get(),
       window.fvc.launch.getState(),
       window.fvc.downloads.list(),
       window.fvc.system.totalRamMb(),
       window.fvc.legal.status()
     ])
-    set({ settings, launch, downloads, totalRamMb })
+    set({ settings, launches, downloads, totalRamMb })
     await Promise.all([get().refreshAccounts(), get().refreshProfiles()])
 
     window.fvc.onNotification((n) => get().pushNotification(n))
     window.fvc.onAccountsChanged(() => void get().refreshAccounts())
     window.fvc.onProfilesChanged(() => void get().refreshProfiles())
-    window.fvc.launch.onState((launchState) => set({ launch: launchState }))
+    window.fvc.launch.onState((launches) => set({ launches }))
     window.fvc.downloads.onUpdate((tasks) => set({ downloads: tasks }))
 
     set({ boot: legal.accepted ? 'ready' : 'legal' })

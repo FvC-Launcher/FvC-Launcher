@@ -71,7 +71,7 @@ const api: FvcApi = {
   },
   launch: {
     start: (pid) => ipcRenderer.invoke(CH.launchStart, pid),
-    kill: () => ipcRenderer.invoke(CH.launchKill),
+    kill: (sessionId) => ipcRenderer.invoke(CH.launchKill, sessionId),
     getState: () => ipcRenderer.invoke(CH.launchGetState),
     onState: (cb) => subscribe(CH.launchState, cb),
     onLog: (cb) => subscribe(CH.launchLog, cb)

@@ -158,9 +158,10 @@ export interface FvcApi {
   }
   launch: {
     start(profileId: string): Promise<void>
-    kill(): Promise<void>
-    getState(): Promise<LaunchState>
-    onState(cb: (state: LaunchState) => void): () => void
+    /** Stops one game, or every running game when no session is given. */
+    kill(sessionId?: string): Promise<void>
+    getState(): Promise<LaunchState[]>
+    onState(cb: (sessions: LaunchState[]) => void): () => void
     onLog(cb: (line: string) => void): () => void
   }
   downloads: {

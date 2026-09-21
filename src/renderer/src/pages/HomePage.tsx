@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { Avatar, Button } from '@/components/ui'
 import { formatCount, formatRelative, useActiveAccount, useApp, useSelectedProfile } from '@/store'
-import { LOADER_LABELS, profileIcon } from '@/lib'
+import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
 import type { ModrinthSearchHit, NewsItem } from '@shared/types'
 
 export function HomePage(): ReactNode {
@@ -20,7 +20,7 @@ export function HomePage(): ReactNode {
   const openProject = useApp((s) => s.openProject)
   const openProfile = useApp((s) => s.openProfile)
   const profiles = useApp((s) => s.profiles)
-  const launch = useApp((s) => s.launch)
+  const launches = useApp((s) => s.launches)
   const profile = useSelectedProfile()
   const account = useActiveAccount()
 
@@ -40,7 +40,8 @@ export function HomePage(): ReactNode {
     .sort((a, b) => (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? ''))
     .slice(0, 3)
 
-  const busy = launch.phase !== 'idle' && launch.phase !== 'stopped' && launch.phase !== 'error'
+  const preparing = launches.find((l) => PREPARING_PHASES.includes(l.phase))
+  const busy = !!preparing
 
   return (
     <div className="stack" style={{ gap: 24 }}>
@@ -90,7 +91,7 @@ export function HomePage(): ReactNode {
             onClick={() => navigate('play')}
             style={{ padding: '12px 28px', fontSize: '1rem' }}
           >
-            {busy ? launch.detail || 'Working…' : 'Quick Launch'}
+            {preparing ? preparing.detail || 'Working…' : 'Quick Launch'}
           </Button>
           <Button icon={Package} onClick={() => navigate('mods')}>
             Browse mods

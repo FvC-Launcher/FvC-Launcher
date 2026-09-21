@@ -120,7 +120,7 @@ export function registerIpc(): void {
 
   // Launch
   ipcMain.handle(CH.launchStart, (_e, pid) => launchService.start(pid))
-  ipcMain.handle(CH.launchKill, () => launchService.kill())
+  ipcMain.handle(CH.launchKill, (_e, sessionId) => launchService.kill(sessionId))
   ipcMain.handle(CH.launchGetState, () => launchService.getState())
 
   // Downloads

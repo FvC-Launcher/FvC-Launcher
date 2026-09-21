@@ -14,13 +14,13 @@ import {
 import { Avatar, Button, Modal, Select, Toggle } from '@/components/ui'
 import { AddAccountModal } from '@/components/AddAccountModal'
 import { useApp, useSelectedProfile } from '@/store'
-import { LOADER_LABELS, profileIcon } from '@/lib'
+import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
 
 export function PlayPage(): ReactNode {
   const profiles = useApp((s) => s.profiles)
   const selectProfile = useApp((s) => s.selectProfile)
   const navigate = useApp((s) => s.navigate)
-  const launch = useApp((s) => s.launch)
+  const launches = useApp((s) => s.launches)
   const settings = useApp((s) => s.settings)
   const setSettings = useApp((s) => s.setSettings)
   const accounts = useApp((s) => s.accounts)
@@ -45,14 +45,24 @@ export function PlayPage(): ReactNode {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
   }, [logs, showConsole])
 
+  const devMode = settings.developerMode
+  const mine = launches.filter((l) => l.profileId === profile?.id)
+  const preparing = mine.find((l) => PREPARING_PHASES.includes(l.phase))
+  const runningHere = mine.filter((l) => l.phase === 'running')
+  // Only one launch may prepare at a time, whichever profile it is for.
+  const preparingElsewhere = !preparing && launches.some((l) => PREPARING_PHASES.includes(l.phase))
+  const busy = !!preparing
+  // Without developer mode a running game turns Play into Stop.
+  const showStop = !devMode && runningHere.length > 0
+
   useEffect(() => {
-    if (settings.showConsoleOnLaunch && (launch.phase === 'launching' || launch.phase === 'running')) {
+    if (
+      settings.showConsoleOnLaunch &&
+      (preparing?.phase === 'launching' || runningHere.length > 0)
+    ) {
       setShowConsole(true)
     }
-  }, [launch.phase, settings.showConsoleOnLaunch])
-
-  const busy = ['verifying', 'java', 'loader', 'assets', 'launching'].includes(launch.phase)
-  const running = launch.phase === 'running'
+  }, [preparing?.phase, runningHere.length, settings.showConsoleOnLaunch])
 
   /**
    * Entry point for the Play button: with no accounts, offer to add one
@@ -149,23 +159,33 @@ export function PlayPage(): ReactNode {
         </div>
 
         <AnimatePresence mode="wait">
-          {running ? (
+          {showStop ? (
             <motion.div key="stop" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <button className="btn-play" style={{ background: 'linear-gradient(135deg, #f87171, #fb923c)' }} onClick={() => void window.fvc.launch.kill()}>
+              <button
+                className="btn-play"
+                style={{ background: 'linear-gradient(135deg, #f87171, #fb923c)' }}
+                onClick={() => runningHere.forEach((l) => void window.fvc.launch.kill(l.sessionId))}
+              >
                 <Square fill="currentColor" strokeWidth={0} /> Stop
               </button>
             </motion.div>
           ) : (
             <motion.div key="play" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <button className="btn-play" disabled={busy} onClick={requestStart}>
+              <button
+                className="btn-play"
+                disabled={busy || preparingElsewhere}
+                title={preparingElsewhere ? 'Another game is still starting' : undefined}
+                onClick={requestStart}
+              >
                 {busy ? (
                   <>
                     <span className="spinner" style={{ borderTopColor: '#06131a' }} />
-                    {launch.phase === 'launching' ? 'Launching…' : 'Preparing…'}
+                    {preparing?.phase === 'launching' ? 'Launching…' : 'Preparing…'}
                   </>
                 ) : (
                   <>
-                    <Play fill="currentColor" strokeWidth={0} /> Play
+                    <Play fill="currentColor" strokeWidth={0} />{' '}
+                    {devMode && runningHere.length > 0 ? 'Play another' : 'Play'}
                   </>
                 )}
               </button>
@@ -173,19 +193,35 @@ export function PlayPage(): ReactNode {
           )}
         </AnimatePresence>
 
+        {devMode && runningHere.length > 0 && (
+          <div className="stack" style={{ gap: 6, width: 380 }}>
+            {runningHere.map((l, i) => (
+              <div key={l.sessionId} className="card row between" style={{ padding: '8px 12px', gap: 10 }}>
+                <span className="tiny">
+                  Instance {i + 1}
+                  {l.accountName ? ` · ${l.accountName}` : ''}
+                  {l.pid ? ` · PID ${l.pid}` : ''}
+                </span>
+                <Button icon={Square} onClick={() => void window.fvc.launch.kill(l.sessionId)}>
+                  Stop
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <AnimatePresence>
-          {busy && (
+          {preparing && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               style={{ width: 380, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}
             >
-              <span className="tiny">{launch.detail}</span>
+              <span className="tiny">{preparing.detail}</span>
               <div className="progress" style={{ width: '100%' }}>
                 <div
-                  className={launch.progress < 0 ? undefined : undefined}
-                  style={{ width: launch.progress < 0 ? '100%' : `${launch.progress * 100}%`, opacity: launch.progress < 0 ? 0.35 : 1 }}
+                  style={{ width: preparing.progress < 0 ? '100%' : `${preparing.progress * 100}%`, opacity: preparing.progress < 0 ? 0.35 : 1 }}
                 />
               </div>
             </motion.div>

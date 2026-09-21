@@ -12,20 +12,29 @@ import { settingsService } from './settings'
 import { downloadsService } from './downloads'
 import { javaService, requiredJavaMajor } from './java'
 import { skinsService } from './skins'
-import type { LaunchState, LoaderId, Profile } from '@shared/types'
+import { randomUUID } from 'crypto'
+import type { LaunchPhase, LaunchState, LoaderId, Profile } from '@shared/types'
 
-let state: LaunchState = {
-  profileId: null,
-  phase: 'idle',
-  detail: '',
-  progress: -1
+const sessions = new Map<string, LaunchState>()
+const PREPARING: LaunchPhase[] = ['verifying', 'java', 'loader', 'assets', 'launching']
+const FINISHED: LaunchPhase[] = ['idle', 'stopped', 'error']
+
+function publish(): void {
+  broadcast(CH.launchState, [...sessions.values()])
 }
-let activeClient: Client | null = null
-let gameStartedAt = 0
 
-function setState(patch: Partial<LaunchState>): void {
-  state = { ...state, ...patch }
-  broadcast(CH.launchState, state)
+function update(sessionId: string, patch: Partial<LaunchState>): void {
+  const current = sessions.get(sessionId)
+  if (!current) return
+  sessions.set(sessionId, { ...current, ...patch })
+  publish()
+}
+
+/** Finished sessions linger briefly so the UI can show "Game closed" / the error. */
+function removeLater(sessionId: string, ms: number): void {
+  setTimeout(() => {
+    if (sessions.delete(sessionId)) publish()
+  }, ms)
 }
 
 function log(line: string): void {
@@ -99,21 +108,42 @@ function loaderLabel(loader: LoaderId): string {
 }
 
 export const launchService = {
-  getState(): LaunchState {
-    return state
+  getState(): LaunchState[] {
+    return [...sessions.values()]
   },
 
   async start(profileId: string): Promise<void> {
-    if (state.phase === 'running' || state.phase === 'launching') {
-      throw new Error('A game is already running.')
+    const settings = settingsService.get()
+    const refuse = (body: string): never => {
+      notify({ type: 'warning', title: 'Can’t launch yet', body })
+      throw new Error(body)
+    }
+    const active = [...sessions.values()].filter((s) => !FINISHED.includes(s.phase))
+    if (!settings.developerMode && active.length > 0) {
+      refuse('A game is already running. Enable developer mode in Settings → Advanced to run several at once.')
+    }
+    // Two launches preparing at once would download into the same shared files.
+    if (active.some((s) => PREPARING.includes(s.phase))) {
+      refuse('Another game is still starting. Launch the next one once its window is open.')
     }
     let profile = profilesService.get(profileId)
     if (!profile) throw new Error('Profile not found.')
-    const settings = settingsService.get()
     const accountId = accountsService.getActiveId()
     if (!accountId) throw new Error('Add an account before launching.')
 
-    setState({ profileId, phase: 'verifying', detail: 'Preparing account…', progress: -1, error: undefined })
+    const sessionId = randomUUID()
+    sessions.set(sessionId, {
+      sessionId,
+      profileId,
+      accountName: accountsService.list().find((a) => a.id === accountId)?.username,
+      phase: 'verifying',
+      detail: 'Preparing account…',
+      progress: -1
+    })
+    publish()
+    const setState = (patch: Partial<LaunchState>): void => update(sessionId, patch)
+    const phase = (): LaunchPhase | undefined => sessions.get(sessionId)?.phase
+    let gameStartedAt = 0
 
     try {
       // 0. GitHub-backed packs must match the latest release before playing.
@@ -178,13 +208,12 @@ export const launchService = {
       ]
 
       const client = new Client()
-      activeClient = client
 
       client.on('debug', (line: string) => settings.debugLogging && log(`[debug] ${line}`))
       client.on('data', (line: string) => {
         log(line)
         // First game output = the window is up.
-        if (state.phase === 'launching') {
+        if (phase() === 'launching') {
           gameStartedAt = Date.now()
           setState({ phase: 'running', detail: 'Game running', progress: -1 })
           tracker.finish(true)
@@ -197,12 +226,11 @@ export const launchService = {
       client.on('progress', (e: { type: string; task: number; total: number }) => {
         const progress = e.total > 0 ? e.task / e.total : -1
         tracker.update(progress, `${e.type}`)
-        if (state.phase === 'assets') {
+        if (phase() === 'assets') {
           setState({ detail: `Downloading ${e.type}…`, progress })
         }
       })
       client.on('close', (code: number) => {
-        activeClient = null
         tracker.finish(true)
         if (gameStartedAt > 0) {
           profilesService.addPlaySession(profileId, (Date.now() - gameStartedAt) / 1000)
@@ -210,13 +238,13 @@ export const launchService = {
         }
         const win = BrowserWindow.getAllWindows()[0]
         if (win && !win.isDestroyed() && win.isMinimized()) win.restore()
-        if (code !== 0 && state.phase !== 'stopped') {
+        if (code !== 0 && phase() !== 'stopped') {
           setState({ phase: 'error', detail: `Game exited with code ${code}`, error: `Exit code ${code}` })
           notify({ type: 'error', title: 'Game crashed', body: `Minecraft exited with code ${code}.` })
         } else {
           setState({ phase: 'stopped', detail: 'Game closed', progress: -1 })
         }
-        setTimeout(() => state.phase !== 'running' && setState({ phase: 'idle', detail: '' }), 1500)
+        removeLater(sessionId, 1500)
       })
 
       const launched = await client.launch({
@@ -245,24 +273,26 @@ export const launchService = {
       setState({ phase: 'launching', detail: 'Starting Minecraft…', progress: -1, pid: launched.pid })
       profilesService.update(profileId, { lastPlayed: new Date().toISOString() })
     } catch (err) {
-      activeClient = null
       const message = err instanceof Error ? err.message : String(err)
       setState({ phase: 'error', detail: message, error: message })
       notify({ type: 'error', title: 'Launch failed', body: message })
-      setTimeout(() => state.phase === 'error' && setState({ phase: 'idle', detail: '' }), 4000)
+      removeLater(sessionId, 4000)
       throw err
     }
   },
 
-  kill(): void {
-    if (state.pid) {
-      setState({ phase: 'stopped', detail: 'Stopping game…' })
+  kill(sessionId?: string): void {
+    const targets = sessionId
+      ? [sessions.get(sessionId)].filter((s): s is LaunchState => !!s)
+      : [...sessions.values()]
+    for (const session of targets) {
+      if (!session.pid || FINISHED.includes(session.phase)) continue
+      update(session.sessionId, { phase: 'stopped', detail: 'Stopping game…' })
       try {
-        process.kill(state.pid)
+        process.kill(session.pid)
       } catch {
         /* already dead */
       }
     }
-    activeClient = null
   }
 }

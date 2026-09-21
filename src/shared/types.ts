@@ -315,7 +315,10 @@ export interface AppSettings {
   curseforgeApiKey: string
   // Advanced
   debugLogging: boolean
+  /** Also allows running several games at the same time. */
   developerMode: boolean
+  /** Update to GitHub pre-releases too, whichever is newest. */
+  alphaBuilds: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -349,7 +352,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoUpdateMods: false,
   curseforgeApiKey: '',
   debugLogging: false,
-  developerMode: false
+  developerMode: false,
+  alphaBuilds: false
 }
 
 // ----------------------------------- Versions ------------------------------
@@ -379,8 +383,11 @@ export type LaunchPhase =
   | 'stopped'
   | 'error'
 
+/** One game launch; several can run at once in developer mode. */
 export interface LaunchState {
-  profileId: string | null
+  sessionId: string
+  profileId: string
+  accountName?: string
   phase: LaunchPhase
   detail: string
   progress: number // 0..1, -1 indeterminate

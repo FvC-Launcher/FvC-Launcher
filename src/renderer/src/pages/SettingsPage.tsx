@@ -65,6 +65,19 @@ export function SettingsPage(): ReactNode {
               <Toggle checked={settings.checkLauncherUpdates} onChange={(v) => set({ checkLauncherUpdates: v })} />
             </SettingRow>
             <SettingRow
+              label="Alpha builds"
+              description="Also update to pre-releases, so you always get the newest version on GitHub. They can be unstable. Turning this off keeps your current version until a newer stable release is out."
+            >
+              <Toggle
+                checked={settings.alphaBuilds}
+                onChange={(v) => {
+                  void setSettings({ alphaBuilds: v }).then(() => {
+                    if (v) void window.fvc.updater.check()
+                  })
+                }}
+              />
+            </SettingRow>
+            <SettingRow
               label="Ask which account to use"
               description="When you have several accounts, choose one every time you press Play"
             >
@@ -447,7 +460,10 @@ export function SettingsPage(): ReactNode {
             <SettingRow label="Debug logging" description="Verbose launcher logs, including game verification output">
               <Toggle checked={settings.debugLogging} onChange={(v) => set({ debugLogging: v })} />
             </SettingRow>
-            <SettingRow label="Developer mode">
+            <SettingRow
+              label="Developer mode"
+              description="Run several games at the same time, even the same profile with different accounts"
+            >
               <Toggle checked={settings.developerMode} onChange={(v) => set({ developerMode: v })} />
             </SettingRow>
             <SettingRow label="Open logs folder">

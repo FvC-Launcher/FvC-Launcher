@@ -99,10 +99,20 @@ function releaseNotesToString(notes: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * With pre-releases allowed, electron-updater takes the newest entry of the
+ * repo's releases feed, pre-release or not; otherwise it asks GitHub for the
+ * latest stable release. Read fresh before every check so the toggle applies
+ * without a restart.
+ */
+function checkForUpdates(): Promise<unknown> {
+  autoUpdater.allowPrerelease = settingsService.get().alphaBuilds
+  return autoUpdater.checkForUpdates()
+}
+
 function wireEvents(): void {
   autoUpdater.autoDownload = false // never download without consent
   autoUpdater.autoInstallOnAppQuit = canSelfUpdate // downloaded updates apply on quit
-  autoUpdater.allowPrerelease = false
 
   autoUpdater.on('checking-for-update', () => setState({ status: 'checking' }))
 
@@ -170,7 +180,7 @@ export const updaterService = {
     if (settingsService.get().checkLauncherUpdates) {
       // Give startup and window paint a moment before checking.
       setTimeout(() => {
-        void autoUpdater.checkForUpdates().catch(() => {
+        void checkForUpdates().catch(() => {
           /* offline etc. — state already set by the error event */
         })
       }, 6000)
@@ -189,7 +199,7 @@ export const updaterService = {
     }
     if (state.status === 'downloading' || state.status === 'downloaded') return
     manualCheck = true
-    await autoUpdater.checkForUpdates().catch(() => {
+    await checkForUpdates().catch(() => {
       /* error event handles state + notification */
     })
   },
