@@ -127,6 +127,9 @@ const api: FvcApi = {
     getState: () => ipcRenderer.invoke(CH.updaterGetState),
     onState: (cb) => subscribe(CH.updaterState, cb)
   },
+  discord: {
+    setPage: (page) => ipcRenderer.send(CH.discordSetPage, page)
+  },
   onNotification: (cb) => subscribe(CH.notify, cb),
   onProfilesChanged: (cb) => subscribe(CH.profilesChanged, cb),
   onAccountsChanged: (cb) => subscribe(CH.accountsChanged, cb)

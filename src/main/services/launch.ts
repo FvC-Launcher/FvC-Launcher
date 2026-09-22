@@ -12,15 +12,18 @@ import { settingsService } from './settings'
 import { downloadsService } from './downloads'
 import { javaService, requiredJavaMajor } from './java'
 import { skinsService } from './skins'
+import { discordService } from './discord'
 import { randomUUID } from 'crypto'
-import type { LaunchPhase, LaunchState, LoaderId, Profile } from '@shared/types'
+import { LOADER_LABELS, type LaunchPhase, type LaunchState, type Profile } from '@shared/types'
 
 const sessions = new Map<string, LaunchState>()
 const PREPARING: LaunchPhase[] = ['verifying', 'java', 'loader', 'assets', 'launching']
 const FINISHED: LaunchPhase[] = ['idle', 'stopped', 'error']
 
 function publish(): void {
-  broadcast(CH.launchState, [...sessions.values()])
+  const all = [...sessions.values()]
+  broadcast(CH.launchState, all)
+  discordService.setLaunches(all)
 }
 
 function update(sessionId: string, patch: Partial<LaunchState>): void {
@@ -103,10 +106,6 @@ async function downloadForgeInstaller(profile: Profile): Promise<string> {
   return dest
 }
 
-function loaderLabel(loader: LoaderId): string {
-  return { vanilla: 'Vanilla', fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', quilt: 'Quilt' }[loader]
-}
-
 export const launchService = {
   getState(): LaunchState[] {
     return [...sessions.values()]
@@ -178,10 +177,10 @@ export const launchService = {
       let customVersion: string | undefined
       let forgeInstaller: string | undefined
       if (profile.loader === 'fabric' || profile.loader === 'quilt') {
-        setState({ phase: 'loader', detail: `Installing ${loaderLabel(profile.loader)}…` })
+        setState({ phase: 'loader', detail: `Installing ${LOADER_LABELS[profile.loader]}…` })
         customVersion = await installFabricLike(profile)
       } else if (profile.loader === 'forge' || profile.loader === 'neoforge') {
-        setState({ phase: 'loader', detail: `Fetching ${loaderLabel(profile.loader)} installer…` })
+        setState({ phase: 'loader', detail: `Fetching ${LOADER_LABELS[profile.loader]} installer…` })
         forgeInstaller = await downloadForgeInstaller(profile)
       }
       try {
@@ -215,7 +214,7 @@ export const launchService = {
         // First game output = the window is up.
         if (phase() === 'launching') {
           gameStartedAt = Date.now()
-          setState({ phase: 'running', detail: 'Game running', progress: -1 })
+          setState({ phase: 'running', detail: 'Game running', progress: -1, startedAt: gameStartedAt })
           tracker.finish(true)
           const behavior = settingsService.get().afterLaunch
           const win = BrowserWindow.getAllWindows()[0]

@@ -69,6 +69,9 @@ export function SettingsPage(): ReactNode {
             <SettingRow label="Launch on startup" description="Start FvC Launcher when you log in">
               <Toggle checked={settings.launchOnStartup} onChange={(v) => set({ launchOnStartup: v })} />
             </SettingRow>
+            <SettingRow label="Discord Rich Presence" description="Show what you're playing on your Discord profile">
+              <Toggle checked={settings.discordRichPresence} onChange={(v) => set({ discordRichPresence: v })} />
+            </SettingRow>
             <SettingRow label="Check for launcher updates">
               <Toggle checked={settings.checkLauncherUpdates} onChange={(v) => set({ checkLauncherUpdates: v })} />
             </SettingRow>

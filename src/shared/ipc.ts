@@ -25,6 +25,7 @@ import type {
   ModrinthVersion,
   NewsItem,
   NotificationPayload,
+  Page,
   Profile,
   ProfileExportMode,
   ResolvedSkin,
@@ -228,6 +229,10 @@ export interface FvcApi {
     getState(): Promise<UpdaterState>
     onState(cb: (state: UpdaterState) => void): () => void
   }
+  discord: {
+    /** The page shown in the idle Rich Presence ("Browsing mods", …). */
+    setPage(page: Page): void
+  }
   onNotification(cb: (n: NotificationPayload) => void): () => void
   onProfilesChanged(cb: () => void): () => void
   onAccountsChanged(cb: () => void): () => void
@@ -335,6 +340,8 @@ export const CH = {
   updaterInstall: 'updater:install',
   updaterGetState: 'updater:getState',
   updaterState: 'updater:state',
+
+  discordSetPage: 'discord:setPage',
 
   notify: 'app:notify'
 } as const

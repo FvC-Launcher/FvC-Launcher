@@ -24,13 +24,7 @@ import type { ContentKind, LaunchPhase, LoaderId } from '@shared/types'
 /** A launch in one of these phases is still getting ready (no game window yet). */
 export const PREPARING_PHASES: LaunchPhase[] = ['verifying', 'java', 'loader', 'assets', 'launching']
 
-export const LOADER_LABELS: Record<LoaderId, string> = {
-  vanilla: 'Vanilla',
-  fabric: 'Fabric',
-  forge: 'Forge',
-  neoforge: 'NeoForge',
-  quilt: 'Quilt'
-}
+export { LOADER_LABELS } from '@shared/types'
 
 export const LOADERS: LoaderId[] = ['vanilla', 'fabric', 'forge', 'neoforge', 'quilt']
 

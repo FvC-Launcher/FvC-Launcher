@@ -20,6 +20,7 @@ import { modpacksService } from './services/modpacks'
 import { curseforgeService } from './services/curseforge'
 import { legalService } from './services/legal'
 import { updaterService } from './services/updater'
+import { discordService } from './services/discord'
 
 export function registerIpc(): void {
   // Window controls
@@ -36,8 +37,16 @@ export function registerIpc(): void {
 
   // Settings
   ipcMain.handle(CH.settingsGet, () => settingsService.get())
-  ipcMain.handle(CH.settingsSet, (_e, patch) => settingsService.set(patch))
-  ipcMain.handle(CH.settingsReset, () => settingsService.reset())
+  ipcMain.handle(CH.settingsSet, (_e, patch) => {
+    const next = settingsService.set(patch)
+    if ('discordRichPresence' in patch) discordService.refresh()
+    return next
+  })
+  ipcMain.handle(CH.settingsReset, () => {
+    const next = settingsService.reset()
+    discordService.refresh()
+    return next
+  })
 
   // Accounts
   ipcMain.handle(CH.accountsList, () => accountsService.list())
@@ -185,4 +194,6 @@ export function registerIpc(): void {
   ipcMain.on(CH.updaterInstall, () => updaterService.install())
   ipcMain.handle(CH.updaterGetState, () => updaterService.getState())
 
+  // Discord Rich Presence
+  ipcMain.on(CH.discordSetPage, (_e, page) => discordService.setPage(page))
 }

@@ -7,6 +7,7 @@ import { registerIpc } from './ipc'
 import { broadcast } from './broadcast'
 import { accountsService } from './services/accounts'
 import { updaterService } from './services/updater'
+import { discordService } from './services/discord'
 import { CH } from '@shared/ipc'
 
 interface WindowState {
@@ -142,6 +143,8 @@ if (!gotLock) {
     setTimeout(() => accountsService.refreshAllInBackground(), 2500)
     // Check GitHub Releases for launcher updates (packaged builds only).
     updaterService.init()
+    // Show what the player is doing on their Discord profile.
+    discordService.init()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

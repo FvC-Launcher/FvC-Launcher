@@ -43,6 +43,8 @@ export default function App(): ReactNode {
     void init()
   }, [init])
 
+  useEffect(() => window.fvc.discord.setPage(page), [page])
+
   // Apply user-tunable appearance settings as CSS variables.
   useEffect(() => {
     const root = document.documentElement

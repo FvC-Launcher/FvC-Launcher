@@ -64,6 +64,14 @@ export interface AppliedSkin {
 
 export type LoaderId = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'
 
+export const LOADER_LABELS: Record<LoaderId, string> = {
+  vanilla: 'Vanilla',
+  fabric: 'Fabric',
+  forge: 'Forge',
+  neoforge: 'NeoForge',
+  quilt: 'Quilt'
+}
+
 /** What an exported .fvcpack contains: only the mods folder, or the whole instance. */
 export type ProfileExportMode = 'mods' | 'everything'
 
@@ -320,6 +328,8 @@ export interface AppSettings {
   developerMode: boolean
   /** Update to GitHub pre-releases too, whichever is newest. */
   alphaBuilds: boolean
+  /** Show what you're doing in the launcher on your Discord profile. */
+  discordRichPresence: boolean
 }
 
 export interface ModBrowserPrefs {
@@ -372,7 +382,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   curseforgeApiKey: '',
   debugLogging: false,
   developerMode: false,
-  alphaBuilds: false
+  alphaBuilds: false,
+  discordRichPresence: true
 }
 
 // ----------------------------------- Versions ------------------------------
@@ -411,6 +422,8 @@ export interface LaunchState {
   detail: string
   progress: number // 0..1, -1 indeterminate
   pid?: number
+  /** Epoch ms when the game window came up. */
+  startedAt?: number
   error?: string
 }
 
