@@ -66,30 +66,84 @@ export const KIND_LABELS: Record<ContentKind, { singular: string; plural: string
   shaderpack: { singular: 'Shader Pack', plural: 'Shader Packs' }
 }
 
-/** Mod categories shown as filters (Modrinth category slugs). */
-export const MOD_CATEGORIES = [
-  'adventure',
-  'cursed',
-  'decoration',
-  'economy',
-  'equipment',
-  'food',
-  'game-mechanics',
-  'library',
-  'magic',
-  'management',
-  'minigame',
-  'mobs',
-  'optimization',
-  'social',
-  'storage',
-  'technology',
-  'transportation',
-  'utility',
-  'worldgen'
-]
+export interface CategoryGroup {
+  label: string
+  items: string[]
+}
+
+/** Filterable Modrinth category slugs per content kind. */
+export const CATEGORY_GROUPS: Record<ContentKind, CategoryGroup[]> = {
+  mod: [
+    {
+      label: 'Categories',
+      items: [
+        'adventure',
+        'cursed',
+        'decoration',
+        'economy',
+        'equipment',
+        'food',
+        'game-mechanics',
+        'library',
+        'magic',
+        'management',
+        'minigame',
+        'mobs',
+        'optimization',
+        'social',
+        'storage',
+        'technology',
+        'transportation',
+        'utility',
+        'worldgen'
+      ]
+    }
+  ],
+  resourcepack: [
+    {
+      label: 'Style',
+      items: ['combat', 'cursed', 'decoration', 'modded', 'realistic', 'simplistic', 'themed', 'tweaks', 'utility', 'vanilla-like']
+    },
+    {
+      label: 'Features',
+      items: ['audio', 'blocks', 'core-shaders', 'entities', 'environment', 'equipment', 'fonts', 'gui', 'items', 'locale', 'models']
+    },
+    {
+      label: 'Resolution',
+      items: ['8x-', '16x', '32x', '48x', '64x', '128x', '256x', '512x+']
+    }
+  ],
+  shaderpack: [
+    {
+      label: 'Style',
+      items: ['cartoon', 'cursed', 'fantasy', 'realistic', 'semi-realistic', 'vanilla-like']
+    },
+    {
+      label: 'Features',
+      items: ['atmosphere', 'bloom', 'colored-lighting', 'foliage', 'path-tracing', 'pbr', 'reflections', 'shadows']
+    },
+    {
+      label: 'Performance',
+      items: ['potato', 'low', 'medium', 'high', 'screenshot']
+    },
+    {
+      label: 'Loader',
+      items: ['iris', 'optifine', 'canvas', 'vanilla']
+    }
+  ]
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  pbr: 'PBR',
+  gui: 'GUI',
+  optifine: 'OptiFine',
+  'vanilla-like': 'Vanilla-like',
+  'semi-realistic': 'Semi-realistic',
+  '8x-': '8x or lower'
+}
 
 export function titleCase(slug: string): string {
+  if (CATEGORY_LABELS[slug]) return CATEGORY_LABELS[slug]
   return slug
     .split('-')
     .map((w) => w[0]?.toUpperCase() + w.slice(1))

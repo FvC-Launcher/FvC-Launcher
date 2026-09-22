@@ -38,6 +38,8 @@ export interface ModrinthSearchParams {
   gameVersion?: string
   loader?: string
   categories?: string[]
+  /** Only projects that can run on this side. */
+  environment?: 'client' | 'server'
   index?: 'relevance' | 'downloads' | 'follows' | 'newest' | 'updated'
   offset?: number
   limit?: number

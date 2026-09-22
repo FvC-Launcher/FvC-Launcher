@@ -307,6 +307,7 @@ export interface AppSettings {
   notificationPosition: 'top-right' | 'bottom-right'
   backgroundImage: string
   backgroundOpacity: number
+  modBrowser: ModBrowserPrefs
   // Downloads
   concurrentDownloads: number
   speedLimitMbps: number // 0 = unlimited
@@ -319,6 +320,23 @@ export interface AppSettings {
   developerMode: boolean
   /** Update to GitHub pre-releases too, whichever is newest. */
   alphaBuilds: boolean
+}
+
+export interface ModBrowserPrefs {
+  view: 'list' | 'grid' | 'compact'
+  sort: 'relevance' | 'downloads' | 'follows' | 'newest' | 'updated'
+  pageSize: number
+  /** Filter results to the target profile's Minecraft version and loader. */
+  compatibleOnly: boolean
+  hideInstalled: boolean
+}
+
+export const DEFAULT_MOD_BROWSER: ModBrowserPrefs = {
+  view: 'list',
+  sort: 'relevance',
+  pageSize: 20,
+  compatibleOnly: true,
+  hideInstalled: false
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -347,6 +365,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationPosition: 'top-right',
   backgroundImage: '',
   backgroundOpacity: 0.35,
+  modBrowser: DEFAULT_MOD_BROWSER,
   concurrentDownloads: 4,
   speedLimitMbps: 0,
   autoUpdateMods: false,

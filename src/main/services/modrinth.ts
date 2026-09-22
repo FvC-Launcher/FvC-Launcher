@@ -67,6 +67,10 @@ export const modrinthService = {
       facets.push([`categories:${params.loader}`])
     }
     for (const cat of params.categories ?? []) facets.push([`categories:${cat}`])
+    if (params.environment) {
+      const side = `${params.environment}_side`
+      facets.push([`${side}:required`, `${side}:optional`])
+    }
 
     const qs = new URLSearchParams({
       query: params.query,
