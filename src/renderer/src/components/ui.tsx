@@ -355,7 +355,7 @@ export function Tabs({
   active,
   onChange
 }: {
-  tabs: { id: string; label: string }[]
+  tabs: { id: string; label: string; icon?: LucideIcon }[]
   active: string
   onChange: (id: string) => void
 }): ReactNode {
@@ -374,6 +374,7 @@ export function Tabs({
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             />
           )}
+          {tab.icon && <tab.icon />}
           {tab.label}
         </button>
       ))}

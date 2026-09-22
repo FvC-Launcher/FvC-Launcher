@@ -4,25 +4,33 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
   Box,
+  CalendarDays,
   Clock,
   Compass,
   Code,
+  Coffee,
   Copy,
   Download,
   FolderOpen,
   Github,
   HardDrive,
   Image,
+  MemoryStick,
   MoreVertical,
   Package,
   Pencil,
   Play,
   Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
   Star,
   Timer,
   Trash2,
   Upload,
-  Wrench
+  Wrench,
+  X,
+  type LucideIcon
 } from 'lucide-react'
 import { Button, ConfirmDialog, EmptyState, Field, Input, Modal, Tabs, Toggle } from '@/components/ui'
 import { InstalledList } from '@/components/InstalledList'
@@ -30,12 +38,38 @@ import { ModBrowser } from '@/components/ModBrowser'
 import { ProfileWizard } from '@/components/ProfileWizard'
 import { formatPlayTime, formatRelative, useApp } from '@/store'
 import { CommunityPacksModal } from '@/components/CommunityPacksModal'
-import { LOADER_LABELS, profileIcon } from '@/lib'
+import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
 import type { ContentKind, Profile, ProfileExportMode } from '@shared/types'
 
 export function ProfilesPage(): ReactNode {
   const openProfileId = useApp((s) => s.openProfileId)
   return openProfileId ? <ProfileDetail profileId={openProfileId} /> : <ProfileGrid />
+}
+
+// ============================================================== Shared
+
+/** Stable hue per profile, so cards without a cover image are still easy to tell apart. */
+function coverHue(id: string): number {
+  let hue = 0
+  for (const ch of id) hue = (hue * 31 + ch.charCodeAt(0)) % 360
+  return hue
+}
+
+/** The profile's background image, or a generated banner tinted from its id. */
+function ProfileCover({ profile }: { profile: Profile }): ReactNode {
+  const Icon = profileIcon(profile.icon)
+  return (
+    <div
+      className={`pf-cover ${profile.backgroundImage ? 'has-image' : ''}`}
+      style={{ ['--hue' as never]: String(coverHue(profile.id)) }}
+    >
+      {profile.backgroundImage ? (
+        <div className="pf-cover-img" style={{ backgroundImage: `url("${profile.backgroundImage}")` }} />
+      ) : (
+        <Icon className="pf-cover-glyph" strokeWidth={1.25} />
+      )}
+    </div>
+  )
 }
 
 // ============================================================== Grid view
@@ -46,13 +80,46 @@ interface MenuState {
   y: number
 }
 
+const SORTS = {
+  recent: {
+    label: 'Recent',
+    compare: (a: Profile, b: Profile) =>
+      (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? '') || b.createdAt.localeCompare(a.createdAt)
+  },
+  name: {
+    label: 'Name',
+    compare: (a: Profile, b: Profile) => a.name.localeCompare(b.name, undefined, { numeric: true })
+  },
+  playtime: {
+    label: 'Play time',
+    compare: (a: Profile, b: Profile) => (b.playTimeSeconds || 0) - (a.playTimeSeconds || 0)
+  }
+} satisfies Record<string, { label: string; compare: (a: Profile, b: Profile) => number }>
+
+type SortId = keyof typeof SORTS
+
+const SORT_STORAGE_KEY = 'fvc.profiles.sort'
+
+function readStoredSort(): SortId {
+  try {
+    const stored = localStorage.getItem(SORT_STORAGE_KEY)
+    return stored && stored in SORTS ? (stored as SortId) : 'recent'
+  } catch {
+    return 'recent'
+  }
+}
+
 function ProfileGrid(): ReactNode {
   const profiles = useApp((s) => s.profiles)
+  const launches = useApp((s) => s.launches)
+  const selectedProfileId = useApp((s) => s.selectedProfileId)
   const openProfile = useApp((s) => s.openProfile)
   const selectProfile = useApp((s) => s.selectProfile)
   const navigate = useApp((s) => s.navigate)
   const pushNotification = useApp((s) => s.pushNotification)
 
+  const [query, setQuery] = useState('')
+  const [sort, setSortState] = useState<SortId>(readStoredSort)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [renameTarget, setRenameTarget] = useState<Profile | null>(null)
@@ -167,7 +234,27 @@ function ProfileGrid(): ReactNode {
     setGithubRemoveOld(exportTarget?.packSource?.removeOld ?? true)
   }
 
-  const sorted = [...profiles].sort((a, b) => Number(b.favorite) - Number(a.favorite))
+  const setSort = (next: SortId): void => {
+    setSortState(next)
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, next)
+    } catch {
+      // Storage unavailable — the choice just won't persist.
+    }
+  }
+
+  const needle = query.trim().toLowerCase()
+  const visible = profiles
+    .filter(
+      (p) =>
+        !needle ||
+        p.name.toLowerCase().includes(needle) ||
+        p.minecraftVersion.toLowerCase().includes(needle) ||
+        LOADER_LABELS[p.loader].toLowerCase().includes(needle)
+    )
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite) || SORTS[sort].compare(a, b))
+
+  const totalPlaySeconds = profiles.reduce((sum, p) => sum + (p.playTimeSeconds || 0), 0)
 
   return (
     <>
@@ -203,82 +290,167 @@ function ProfileGrid(): ReactNode {
           }
         />
       ) : (
-        <div className="grid-cards">
-          {sorted.map((profile) => {
-            const Icon = profileIcon(profile.icon)
-            return (
-              <motion.div
-                key={profile.id}
-                layout
-                className="card hoverable"
-                style={{ padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-                onClick={() => openProfile(profile.id)}
-                onContextMenu={(e) => showMenu(e, profile)}
-              >
-                {profile.backgroundImage && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundImage: `linear-gradient(180deg, rgba(28,32,41,0.75), rgba(28,32,41,0.95)), url("${profile.backgroundImage}")`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
+        <div className="stack" style={{ gap: 16 }}>
+          <div className="pf-toolbar">
+            <div className="pf-search">
+              <Search size={16} />
+              <Input
+                placeholder="Search profiles…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                style={{ paddingLeft: 38, paddingRight: query ? 36 : undefined }}
+              />
+              {query && (
+                <button className="mb-clear" onClick={() => setQuery('')} title="Clear search">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="pf-summary tiny">
+              {profiles.length} {profiles.length === 1 ? 'profile' : 'profiles'}
+              {totalPlaySeconds >= 60 && ` · ${formatPlayTime(totalPlaySeconds)} played`}
+            </div>
+            <div className="segmented" role="radiogroup" aria-label="Sort profiles">
+              {(Object.keys(SORTS) as SortId[]).map((id) => (
+                <button
+                  key={id}
+                  role="radio"
+                  aria-checked={sort === id}
+                  className={sort === id ? 'active' : ''}
+                  onClick={() => setSort(id)}
+                >
+                  {SORTS[id].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title={`No profiles match “${query.trim()}”`}
+              hint="Try a profile name, Minecraft version or loader."
+              action={<Button onClick={() => setQuery('')}>Clear search</Button>}
+            />
+          ) : (
+            <div className="pf-grid">
+              {visible.map((profile) => {
+                const Icon = profileIcon(profile.icon)
+                const mine = launches.filter((l) => l.profileId === profile.id)
+                const running = mine.some((l) => l.phase === 'running')
+                const preparing = mine.some((l) => PREPARING_PHASES.includes(l.phase))
+                const selected = profile.id === selectedProfileId
+                return (
+                  <motion.div
+                    key={profile.id}
+                    layout
+                    role="button"
+                    tabIndex={0}
+                    className={`pf-card ${selected ? 'selected' : ''}`}
+                    onClick={() => openProfile(profile.id)}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && e.key === 'Enter') openProfile(profile.id)
                     }}
-                  />
-                )}
-                <div style={{ position: 'relative' }}>
-                  <div className="row between">
-                    <span className="mod-icon" style={{ width: 52, height: 52 }}>
-                      <Icon size={24} />
-                    </span>
-                    <div className="row" style={{ gap: 4 }}>
-                      {profile.favorite && (
-                        <Star size={16} fill="var(--warning)" strokeWidth={0} />
-                      )}
-                      <Button
-                        variant="subtle"
-                        icon={MoreVertical}
-                        onClick={(e) => showMenu(e, profile)}
-                        aria-label="Profile actions"
-                      />
-                    </div>
-                  </div>
-                  <h3 style={{ marginTop: 12, fontSize: '1.02rem' }}>{profile.name}</h3>
-                  <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span className="badge accent">{profile.minecraftVersion}</span>
-                    <span className="badge">{LOADER_LABELS[profile.loader]}</span>
-                    {profile.packSource && (
-                      <span
-                        className="badge"
-                        title={`Auto-updates from github.com/${profile.packSource.repo}${profile.packSource.installedTag ? ` · ${profile.packSource.installedTag}` : ''}`}
-                      >
-                        <Github size={11} /> Auto-update
-                      </span>
-                    )}
-                  </div>
-                  <div className="row" style={{ gap: 14, marginTop: 14 }}>
-                    <span className="tiny row" style={{ gap: 5 }}>
-                      <Clock size={12} /> {formatRelative(profile.lastPlayed)}
-                    </span>
-                    <span className="tiny row" style={{ gap: 5 }}>
-                      <Timer size={12} /> {formatPlayTime(profile.playTimeSeconds)}
-                    </span>
-                  </div>
-                  <Button
-                    variant="primary"
-                    icon={Play}
-                    style={{ width: '100%', marginTop: 14 }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void selectProfile(profile.id).then(() => navigate('play'))
-                    }}
+                    onContextMenu={(e) => showMenu(e, profile)}
                   >
-                    Play
-                  </Button>
-                </div>
-              </motion.div>
-            )
-          })}
+                    <div className="pf-card-cover">
+                      <ProfileCover profile={profile} />
+                      <div className="pf-card-top">
+                        {running ? (
+                          <span className="pf-status running">
+                            <span className="dot" /> Running
+                          </span>
+                        ) : preparing ? (
+                          <span className="pf-status">
+                            <span className="spinner" /> Launching
+                          </span>
+                        ) : selected ? (
+                          <span className="pf-status">Selected</span>
+                        ) : (
+                          <span />
+                        )}
+                        <div className="pf-card-tools">
+                          <button
+                            className={`pf-glass-btn ${profile.favorite ? 'on' : ''}`}
+                            title={profile.favorite ? 'Unfavorite' : 'Favorite'}
+                            aria-label={profile.favorite ? 'Unfavorite' : 'Favorite'}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void act(() =>
+                                window.fvc.profiles.update(profile.id, { favorite: !profile.favorite })
+                              )
+                            }}
+                          >
+                            <Star size={15} fill={profile.favorite ? 'currentColor' : 'none'} />
+                          </button>
+                          <button
+                            className="pf-glass-btn"
+                            title="Profile actions"
+                            aria-label="Profile actions"
+                            onClick={(e) => showMenu(e, profile)}
+                          >
+                            <MoreVertical size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pf-card-body">
+                      <span className="pf-card-icon">
+                        <Icon size={22} />
+                      </span>
+                      <h3 className="pf-card-name" title={profile.name}>
+                        {profile.name}
+                      </h3>
+                      <div className="pf-card-chips">
+                        <span className="badge accent">{profile.minecraftVersion}</span>
+                        <span className="badge">{LOADER_LABELS[profile.loader]}</span>
+                        {profile.packSource && (
+                          <span
+                            className="badge"
+                            title={`Auto-updates from github.com/${profile.packSource.repo}${profile.packSource.installedTag ? ` · ${profile.packSource.installedTag}` : ''}`}
+                          >
+                            <Github size={11} /> Auto-update
+                          </span>
+                        )}
+                      </div>
+                      <div className="pf-card-foot">
+                        <div className="pf-card-meta tiny">
+                          <span title="Last played">
+                            <Clock size={12} /> {formatRelative(profile.lastPlayed)}
+                          </span>
+                          <span title="Play time">
+                            <Timer size={12} /> {formatPlayTime(profile.playTimeSeconds)}
+                          </span>
+                        </div>
+                        <button
+                          className="pf-play"
+                          title={`Play ${profile.name}`}
+                          aria-label={`Play ${profile.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void selectProfile(profile.id).then(() => navigate('play'))
+                          }}
+                        >
+                          <Play size={16} fill="currentColor" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+
+              {!needle && (
+                <motion.button layout className="pf-new" onClick={() => setWizardOpen(true)}>
+                  <span className="pf-new-icon">
+                    <Plus size={22} />
+                  </span>
+                  <span className="pf-new-title">New profile</span>
+                  <span className="tiny">Pick a version, loader and mods</span>
+                </motion.button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -540,8 +712,18 @@ function ProfileGrid(): ReactNode {
 
 // ============================================================== Detail view
 
+const DETAIL_TABS = [
+  { id: 'mods', label: 'Mods', icon: Package },
+  { id: 'resourcepacks', label: 'Resource Packs', icon: Image },
+  { id: 'shaders', label: 'Shader Packs', icon: Sparkles },
+  { id: 'settings', label: 'Settings', icon: SlidersHorizontal }
+]
+
 function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
   const profiles = useApp((s) => s.profiles)
+  const launches = useApp((s) => s.launches)
+  const selectedProfileId = useApp((s) => s.selectedProfileId)
+  const defaultRamMb = useApp((s) => s.settings.defaultRamMb)
   const openProfile = useApp((s) => s.openProfile)
   const selectProfile = useApp((s) => s.selectProfile)
   const navigate = useApp((s) => s.navigate)
@@ -574,55 +756,107 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
   }
 
   const Icon = profileIcon(profile.icon)
+  const mine = launches.filter((l) => l.profileId === profile.id)
+  const preparing = mine.find((l) => PREPARING_PHASES.includes(l.phase))
+  const running = mine.some((l) => l.phase === 'running')
+  const ramMb = profile.ramMb || defaultRamMb
+
+  const toggleFavorite = (): void => {
+    void window.fvc.profiles
+      .update(profile.id, { favorite: !profile.favorite })
+      .catch((err) => pushNotification({ type: 'error', title: 'Could not save', body: String(err) }))
+  }
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <div className="row" style={{ gap: 14 }}>
-        <Button variant="subtle" icon={ArrowLeft} onClick={() => openProfile(null)} aria-label="Back" />
-        <span className="mod-icon" style={{ width: 58, height: 58 }}>
-          <Icon size={26} />
-        </span>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '1.4rem' }}>{profile.name}</h1>
-          <div className="row" style={{ gap: 6, marginTop: 6 }}>
-            <span className="badge accent">{profile.minecraftVersion}</span>
-            <span className="badge">
-              {LOADER_LABELS[profile.loader]}
-              {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
-            </span>
-            {profile.packSource && (
-              <span
-                className="badge"
-                title={`Auto-updates from github.com/${profile.packSource.repo}`}
-              >
-                <Github size={11} /> {profile.packSource.installedTag ?? 'Auto-update'}
-              </span>
-            )}
-            <span className="badge">
-              <Timer size={11} /> {formatPlayTime(profile.playTimeSeconds)}
-            </span>
+      <section className="pf-hero">
+        <ProfileCover profile={profile} />
+
+        <div className="pf-hero-top">
+          <button className="pf-back" onClick={() => openProfile(null)}>
+            <ArrowLeft size={16} /> Profiles
+          </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className={`pf-glass-btn lg ${profile.favorite ? 'on' : ''}`}
+              title={profile.favorite ? 'Unfavorite' : 'Favorite'}
+              aria-label={profile.favorite ? 'Unfavorite' : 'Favorite'}
+              onClick={toggleFavorite}
+            >
+              <Star size={16} fill={profile.favorite ? 'currentColor' : 'none'} />
+            </button>
+            <Button icon={FolderOpen} onClick={() => void window.fvc.profiles.openFolder(profile.id)}>
+              Open folder
+            </Button>
           </div>
         </div>
-        <Button icon={FolderOpen} onClick={() => void window.fvc.profiles.openFolder(profile.id)}>
-          Open folder
-        </Button>
-        <Button
-          variant="primary"
-          icon={Play}
-          onClick={() => void selectProfile(profile.id).then(() => navigate('play'))}
-        >
-          Play
-        </Button>
-      </div>
+
+        <div className="pf-hero-main">
+          <span className="pf-hero-icon">
+            <Icon size={32} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className={`pf-hero-label ${running ? 'running' : ''}`}>
+              {running ? (
+                <>
+                  <span className="dot" /> Running now
+                </>
+              ) : profile.id === selectedProfileId ? (
+                'Selected profile'
+              ) : (
+                'Profile'
+              )}
+            </div>
+            <h1 className="pf-hero-title" title={profile.name}>
+              {profile.name}
+            </h1>
+            <div className="home-chips">
+              <span className="home-chip">Minecraft {profile.minecraftVersion}</span>
+              <span className="home-chip">
+                {LOADER_LABELS[profile.loader]}
+                {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
+              </span>
+              {profile.packSource && (
+                <span
+                  className="home-chip"
+                  title={`Auto-updates from github.com/${profile.packSource.repo}`}
+                >
+                  <Github size={12} /> {profile.packSource.installedTag ?? 'Auto-update'}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            className="btn-play pf-hero-play"
+            disabled={!!preparing}
+            onClick={() => void selectProfile(profile.id).then(() => navigate('play'))}
+          >
+            {preparing ? <span className="spinner" /> : <Play fill="currentColor" />}
+            <span className="pf-hero-play-label">
+              {preparing ? preparing.detail || 'Working…' : 'Play'}
+            </span>
+          </button>
+        </div>
+
+        <div className="pf-hero-stats">
+          <HeroStat icon={Timer} label="Play time" value={formatPlayTime(profile.playTimeSeconds)} />
+          <HeroStat icon={Clock} label="Last played" value={formatRelative(profile.lastPlayed)} />
+          <HeroStat icon={MemoryStick} label="Memory" value={`${(ramMb / 1024).toFixed(1)} GB`} />
+          <HeroStat
+            icon={CalendarDays}
+            label="Created"
+            value={new Date(profile.createdAt).toLocaleDateString(undefined, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            })}
+          />
+        </div>
+      </section>
 
       <div className="row between" style={{ flexWrap: 'wrap', gap: 10 }}>
         <Tabs
-          tabs={[
-            { id: 'mods', label: 'Mods' },
-            { id: 'resourcepacks', label: 'Resource Packs' },
-            { id: 'shaders', label: 'Shader Packs' },
-            { id: 'settings', label: 'Settings' }
-          ]}
+          tabs={DETAIL_TABS}
           active={tab}
           onChange={(t) => {
             setTab(t)
@@ -630,14 +864,22 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
           }}
         />
         {tab !== 'settings' && (
-          <div className="tabs">
-            <button className={`tab ${mode === 'installed' ? 'active' : ''}`} onClick={() => setMode('installed')}>
-              {mode === 'installed' && <span className="tab-bg" />}
-              Installed
+          <div className="segmented pf-view" role="radiogroup" aria-label="View">
+            <button
+              role="radio"
+              aria-checked={mode === 'installed'}
+              className={mode === 'installed' ? 'active' : ''}
+              onClick={() => setMode('installed')}
+            >
+              <HardDrive size={14} /> Installed
             </button>
-            <button className={`tab ${mode === 'browse' ? 'active' : ''}`} onClick={() => setMode('browse')}>
-              {mode === 'browse' && <span className="tab-bg" />}
-              Browse Modrinth
+            <button
+              role="radio"
+              aria-checked={mode === 'browse'}
+              className={mode === 'browse' ? 'active' : ''}
+              onClick={() => setMode('browse')}
+            >
+              <Compass size={14} /> Browse Modrinth
             </button>
           </div>
         )}
@@ -657,63 +899,92 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
       )}
     </div>
   )
+}
 
-  function ProfileSettings({ profile }: { profile: Profile }): ReactNode {
-    const patch = (p: Partial<Profile>): void => {
-      void window.fvc.profiles.update(profile.id, p).catch((err) =>
-        pushNotification({ type: 'error', title: 'Could not save', body: String(err) })
-      )
-    }
-    return (
-      <div className="card">
-        <div className="setting-row">
-          <div>
-            <div className="s-label">Background image</div>
-            <div className="s-desc">Shown on the Play page and profile card</div>
-          </div>
-          <div className="s-control row" style={{ gap: 8 }}>
-            {profile.backgroundImage && (
-              <Button variant="subtle" onClick={() => patch({ backgroundImage: undefined })}>
-                Clear
-              </Button>
-            )}
-            <Button
-              icon={Image}
-              onClick={() =>
-                void window.fvc.system.pickImage().then((img) => img && patch({ backgroundImage: img }))
-              }
-            >
-              Choose image
-            </Button>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div>
-            <div className="s-label">Java executable</div>
-            <div className="s-desc">Leave empty to let the launcher manage Java automatically</div>
-          </div>
-          <div className="s-control row" style={{ gap: 8 }}>
-            {profile.javaPath && (
-              <Button variant="subtle" onClick={() => patch({ javaPath: undefined })}>
-                Auto
-              </Button>
-            )}
-            <Button
-              icon={Wrench}
-              onClick={() =>
-                void window.fvc.java
-                  .pickExecutable()
-                  .then((path) => path && patch({ javaPath: path }))
-                  .catch((err) =>
-                    pushNotification({ type: 'error', title: 'Invalid Java', body: String(err) })
-                  )
-              }
-            >
-              {profile.javaPath ? 'Change' : 'Pick Java'}
-            </Button>
-          </div>
-        </div>
+function HeroStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }): ReactNode {
+  return (
+    <div className="pf-hero-stat">
+      <Icon size={16} />
+      <div style={{ minWidth: 0 }}>
+        <div className="pf-hero-stat-label">{label}</div>
+        <div className="pf-hero-stat-value">{value}</div>
       </div>
+    </div>
+  )
+}
+
+function ProfileSettings({ profile }: { profile: Profile }): ReactNode {
+  const pushNotification = useApp((s) => s.pushNotification)
+  const patch = (p: Partial<Profile>): void => {
+    void window.fvc.profiles.update(profile.id, p).catch((err) =>
+      pushNotification({ type: 'error', title: 'Could not save', body: String(err) })
     )
   }
+  return (
+    <div className="card pf-settings">
+      <div className="setting-row">
+        <div className="pf-setting-info">
+          <div className="pf-setting-media">
+            <ProfileCover profile={profile} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="s-label">Background image</div>
+            <div className="s-desc">Shown on the Play page, the profile card and the banner above</div>
+          </div>
+        </div>
+        <div className="s-control row" style={{ gap: 8 }}>
+          {profile.backgroundImage && (
+            <Button variant="subtle" onClick={() => patch({ backgroundImage: undefined })}>
+              Clear
+            </Button>
+          )}
+          <Button
+            icon={Image}
+            onClick={() =>
+              void window.fvc.system.pickImage().then((img) => img && patch({ backgroundImage: img }))
+            }
+          >
+            Choose image
+          </Button>
+        </div>
+      </div>
+      <div className="setting-row">
+        <div className="pf-setting-info">
+          <span className="pf-setting-media">
+            <Coffee size={20} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div className="s-label">Java executable</div>
+            {profile.javaPath ? (
+              <div className="s-desc pf-path" title={profile.javaPath}>
+                {profile.javaPath}
+              </div>
+            ) : (
+              <div className="s-desc">Managed automatically by the launcher</div>
+            )}
+          </div>
+        </div>
+        <div className="s-control row" style={{ gap: 8 }}>
+          {profile.javaPath && (
+            <Button variant="subtle" onClick={() => patch({ javaPath: undefined })}>
+              Auto
+            </Button>
+          )}
+          <Button
+            icon={Wrench}
+            onClick={() =>
+              void window.fvc.java
+                .pickExecutable()
+                .then((path) => path && patch({ javaPath: path }))
+                .catch((err) =>
+                  pushNotification({ type: 'error', title: 'Invalid Java', body: String(err) })
+                )
+            }
+          >
+            {profile.javaPath ? 'Change' : 'Pick Java'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
