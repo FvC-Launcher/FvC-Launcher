@@ -37,7 +37,9 @@ export function UpdateModal(): ReactNode {
       title={
         state.status === 'downloaded'
           ? 'Update ready to install'
-          : `Update available — v${state.version ?? ''}`
+          : state.toStable
+            ? `Latest release — v${state.version ?? ''}`
+            : `Update available — v${state.version ?? ''}`
       }
       footer={
         state.status === 'available' ? (
@@ -46,7 +48,7 @@ export function UpdateModal(): ReactNode {
               Later
             </Button>
             <Button variant="primary" icon={Download} onClick={() => void window.fvc.updater.download()}>
-              Download update
+              {state.toStable ? 'Download release' : 'Download update'}
             </Button>
           </>
         ) : state.status === 'downloaded' ? (
@@ -83,12 +85,14 @@ export function UpdateModal(): ReactNode {
           <ArrowUpCircle size={20} style={{ color: 'var(--accent)', flexShrink: 0 }} />
           <span className="muted" style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>
             {state.status === 'available' &&
-              `FvC Launcher ${state.version} is available. Download it now? The update installs when you restart.`}
+              (state.toStable
+                ? `FvC Launcher ${state.version} is the latest stable release. Download it to leave the alpha builds? It installs when you restart.`
+                : `FvC Launcher ${state.version} is available. Download it now? The update installs when you restart.`)}
             {state.status === 'downloading' && `Downloading FvC Launcher ${state.version}…`}
             {state.status === 'downloaded' &&
               `FvC Launcher ${state.version} has been downloaded. Restart now to apply it, or it will install automatically when you close the launcher.`}
             {state.status === 'manual' &&
-              `FvC Launcher ${state.version} is available. This .deb install can't update itself on Linux — grab the new version from GitHub (or switch to the AppImage build, which updates in place).`}
+              `FvC Launcher ${state.version} is ${state.toStable ? 'the latest stable release' : 'available'}. This .deb install can't update itself on Linux — grab the new version from GitHub (or switch to the AppImage build, which updates in place).`}
           </span>
         </div>
 

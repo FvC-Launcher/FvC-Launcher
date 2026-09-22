@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   Coffee,
   FolderSearch,
+  History,
   Image,
   ScrollText,
   Trash2,
@@ -23,6 +24,13 @@ export function SettingsPage(): ReactNode {
   const [section, setSection] = useState('general')
   const [javas, setJavas] = useState<JavaInstall[] | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
+  const [runningPrerelease, setRunningPrerelease] = useState(false)
+  const [reverting, setReverting] = useState(false)
+
+  useEffect(() => {
+    // Semver pre-releases carry a "-" suffix (e.g. 2.3.0-alpha.1).
+    void window.fvc.system.appVersion().then((v) => setRunningPrerelease(v.includes('-')))
+  }, [])
 
   useEffect(() => {
     if (section === 'minecraft' && javas === null) {
@@ -77,6 +85,25 @@ export function SettingsPage(): ReactNode {
                 }}
               />
             </SettingRow>
+            {(settings.alphaBuilds || runningPrerelease) && (
+              <SettingRow
+                label="Revert to latest release"
+                description="Turn off alpha builds and install the newest stable release from GitHub, even if it is older than this version."
+              >
+                <Button
+                  icon={History}
+                  loading={reverting}
+                  onClick={() => {
+                    setReverting(true)
+                    void setSettings({ alphaBuilds: false })
+                      .then(() => window.fvc.updater.revertToStable())
+                      .finally(() => setReverting(false))
+                  }}
+                >
+                  Revert
+                </Button>
+              </SettingRow>
+            )}
             <SettingRow
               label="Ask which account to use"
               description="When you have several accounts, choose one every time you press Play"

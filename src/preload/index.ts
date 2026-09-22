@@ -121,6 +121,7 @@ const api: FvcApi = {
   },
   updater: {
     check: () => ipcRenderer.invoke(CH.updaterCheck),
+    revertToStable: () => ipcRenderer.invoke(CH.updaterRevertToStable),
     download: () => ipcRenderer.invoke(CH.updaterDownload),
     install: () => ipcRenderer.send(CH.updaterInstall),
     getState: () => ipcRenderer.invoke(CH.updaterGetState),

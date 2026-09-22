@@ -23,6 +23,8 @@ let state: UpdaterState = { status: 'idle' }
 let initialized = false
 /** Distinguishes user-triggered checks (verbose) from background ones (quiet). */
 let manualCheck = false
+/** The running check is a "Revert to latest release" one. */
+let reverting = false
 
 /**
  * electron-updater can only self-install on Linux when running from an
@@ -107,7 +109,20 @@ function releaseNotesToString(notes: unknown): string | undefined {
  */
 function checkForUpdates(): Promise<unknown> {
   autoUpdater.allowPrerelease = settingsService.get().alphaBuilds
+  autoUpdater.allowDowngrade = false
   return autoUpdater.checkForUpdates()
+}
+
+/** Dev builds have no app-update.yml; tell the user instead of checking. */
+function notPackaged(): boolean {
+  if (app.isPackaged) return false
+  setState({ status: 'dev' })
+  notify({
+    type: 'info',
+    title: 'Development build',
+    body: 'Auto-update only works in packaged builds (installed from a release).'
+  })
+  return true
 }
 
 function wireEvents(): void {
@@ -120,16 +135,25 @@ function wireEvents(): void {
     setState({
       status: canSelfUpdate ? 'available' : 'manual',
       version: info.version,
-      notes: releaseNotesToString(info.releaseNotes)
+      notes: releaseNotesToString(info.releaseNotes),
+      toStable: reverting || undefined
     })
+    reverting = false
   })
 
   autoUpdater.on('update-not-available', () => {
     setState({ status: 'idle' })
     if (manualCheck) {
-      notify({ type: 'success', title: 'Up to date', body: `FvC Launcher ${app.getVersion()} is the latest version.` })
+      notify({
+        type: 'success',
+        title: 'Up to date',
+        body: reverting
+          ? `FvC Launcher ${app.getVersion()} is already the latest release.`
+          : `FvC Launcher ${app.getVersion()} is the latest version.`
+      })
     }
     manualCheck = false
+    reverting = false
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -137,13 +161,14 @@ function wireEvents(): void {
       status: 'downloading',
       version: state.version,
       notes: state.notes,
+      toStable: state.toStable,
       percent: progress.percent,
       speedBps: progress.bytesPerSecond
     })
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    setState({ status: 'downloaded', version: info.version, notes: state.notes })
+    setState({ status: 'downloaded', version: info.version, notes: state.notes, toStable: state.toStable })
   })
 
   autoUpdater.on('error', (err) => {
@@ -156,6 +181,7 @@ function wireEvents(): void {
       notify({ type: 'error', title: 'Update check failed', body: message })
     }
     manualCheck = false
+    reverting = false
     console.error('[updater]', raw)
   })
 }
@@ -188,18 +214,34 @@ export const updaterService = {
   },
 
   async check(): Promise<void> {
-    if (!app.isPackaged) {
-      setState({ status: 'dev' })
-      notify({
-        type: 'info',
-        title: 'Development build',
-        body: 'Auto-update only works in packaged builds (installed from a release).'
-      })
-      return
-    }
+    if (notPackaged()) return
     if (state.status === 'downloading' || state.status === 'downloaded') return
     manualCheck = true
     await checkForUpdates().catch(() => {
+      /* error event handles state + notification */
+    })
+  },
+
+  /**
+   * Leave the alpha channel: offer GitHub's latest stable release even when
+   * it is older than the running pre-release. The renderer turns alphaBuilds
+   * off first, so later checks stay on stable.
+   */
+  async revertToStable(): Promise<void> {
+    if (notPackaged()) return
+    if (state.status === 'downloading' || state.status === 'downloaded') {
+      notify({
+        type: 'info',
+        title: 'Update in progress',
+        body: 'Finish the pending update first (restart the launcher), then revert.'
+      })
+      return
+    }
+    manualCheck = true
+    reverting = true
+    autoUpdater.allowPrerelease = false
+    autoUpdater.allowDowngrade = true
+    await autoUpdater.checkForUpdates().catch(() => {
       /* error event handles state + notification */
     })
   },

@@ -493,4 +493,6 @@ export interface UpdaterState {
   /** Bytes per second while downloading. */
   speedBps?: number
   error?: string
+  /** The offered version came from "Revert to latest release" (may be older). */
+  toStable?: boolean
 }

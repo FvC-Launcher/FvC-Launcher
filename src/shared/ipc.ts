@@ -219,6 +219,8 @@ export interface FvcApi {
   updater: {
     /** Manual check; state events carry the outcome. */
     check(): Promise<void>
+    /** Offer the latest stable release, even if older than this pre-release. */
+    revertToStable(): Promise<void>
     /** User consented — start downloading the offered update. */
     download(): Promise<void>
     /** Quit and install the downloaded update now. */
@@ -328,6 +330,7 @@ export const CH = {
 
 
   updaterCheck: 'updater:check',
+  updaterRevertToStable: 'updater:revertToStable',
   updaterDownload: 'updater:download',
   updaterInstall: 'updater:install',
   updaterGetState: 'updater:getState',

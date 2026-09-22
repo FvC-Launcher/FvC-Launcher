@@ -180,6 +180,7 @@ export function registerIpc(): void {
 
   // Updater
   ipcMain.handle(CH.updaterCheck, () => updaterService.check())
+  ipcMain.handle(CH.updaterRevertToStable, () => updaterService.revertToStable())
   ipcMain.handle(CH.updaterDownload, () => updaterService.download())
   ipcMain.on(CH.updaterInstall, () => updaterService.install())
   ipcMain.handle(CH.updaterGetState, () => updaterService.getState())
