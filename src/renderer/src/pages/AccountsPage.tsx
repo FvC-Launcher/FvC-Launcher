@@ -1,23 +1,26 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
-  AlertTriangle,
-  BadgeCheck,
+  BarChart3,
   Check,
+  ChevronRight,
+  Clock,
   Copy,
   LogIn,
   Plus,
   RefreshCw,
+  Rocket,
   Shirt,
+  Timer,
   Trash2,
-  User,
-  WifiOff
+  User
 } from 'lucide-react'
 import { Avatar, Button, ConfirmDialog, EmptyState } from '@/components/ui'
 import { AddAccountModal, useMicrosoftLogin } from '@/components/AddAccountModal'
+import { AccountDetailsModal, StatusBadge } from '@/components/AccountDetailsModal'
 import { SkinViewer } from '@/components/SkinViewer'
-import { formatRelative, useApp } from '@/store'
-import type { Account, SkinModel } from '@shared/types'
+import { formatPlayTime, formatRelative, useApp } from '@/store'
+import type { Account, AccountStats, SkinModel } from '@shared/types'
 
 export function AccountsPage(): ReactNode {
   const accounts = useApp((s) => s.accounts)
@@ -27,9 +30,20 @@ export function AccountsPage(): ReactNode {
   const [addOpen, setAddOpen] = useState(false)
   const [refreshing, setRefreshing] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<Account | null>(null)
+  const [detailsId, setDetailsId] = useState<string | null>(null)
+  const [stats, setStats] = useState<Record<string, AccountStats>>({})
   const { busy: msBusy, login: loginMicrosoft } = useMicrosoftLogin()
 
   const active = accounts.find((a) => a.id === activeId) ?? null
+  const details = accounts.find((a) => a.id === detailsId) ?? null
+
+  useEffect(() => {
+    const load = (): void => {
+      void window.fvc.accounts.stats().then(setStats)
+    }
+    load()
+    return window.fvc.accounts.onStatsChanged(load)
+  }, [])
 
   const refreshSession = async (account: Account): Promise<void> => {
     setRefreshing(account.id)
@@ -81,6 +95,7 @@ export function AccountsPage(): ReactNode {
               signingIn={msBusy}
               onRefresh={() => void refreshSession(active)}
               onSignIn={() => void loginMicrosoft()}
+              onDetails={() => setDetailsId(active.id)}
             />
           )}
 
@@ -97,6 +112,7 @@ export function AccountsPage(): ReactNode {
                 <AccountCard
                   key={account.id}
                   account={account}
+                  stats={stats[account.id]}
                   active={account.id === activeId}
                   refreshing={refreshing === account.id}
                   signingIn={msBusy}
@@ -104,6 +120,7 @@ export function AccountsPage(): ReactNode {
                   onRefresh={() => void refreshSession(account)}
                   onSignIn={() => void loginMicrosoft()}
                   onRemove={() => setRemoveTarget(account)}
+                  onOpen={() => setDetailsId(account.id)}
                 />
               ))}
 
@@ -120,6 +137,22 @@ export function AccountsPage(): ReactNode {
       )}
 
       <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} />
+
+      <AccountDetailsModal
+        account={details}
+        stats={details ? stats[details.id] : undefined}
+        active={details?.id === activeId}
+        refreshing={refreshing === details?.id}
+        signingIn={msBusy}
+        onClose={() => setDetailsId(null)}
+        onUse={() => details && switchTo(details)}
+        onRefresh={() => details && void refreshSession(details)}
+        onSignIn={() => void loginMicrosoft()}
+        onRemove={() => {
+          setRemoveTarget(details)
+          setDetailsId(null)
+        }}
+      />
 
       <ConfirmDialog
         open={removeTarget !== null}
@@ -142,28 +175,6 @@ export function AccountsPage(): ReactNode {
 }
 
 // ============================================================== Status
-
-function StatusBadge({ account }: { account: Account }): ReactNode {
-  if (account.type === 'offline') {
-    return (
-      <span className="badge">
-        <WifiOff size={11} /> Offline
-      </span>
-    )
-  }
-  if (account.needsRelogin) {
-    return (
-      <span className="badge error">
-        <AlertTriangle size={11} /> Session expired
-      </span>
-    )
-  }
-  return (
-    <span className="badge success">
-      <BadgeCheck size={11} /> Microsoft
-    </span>
-  )
-}
 
 function statusLine(account: Account): string {
   if (account.type === 'offline') return `Offline · added ${formatRelative(account.addedAt)}`
@@ -209,13 +220,15 @@ function ActiveAccountHero({
   refreshing,
   signingIn,
   onRefresh,
-  onSignIn
+  onSignIn,
+  onDetails
 }: {
   account: Account
   refreshing: boolean
   signingIn: boolean
   onRefresh: () => void
   onSignIn: () => void
+  onDetails: () => void
 }): ReactNode {
   const navigate = useApp((s) => s.navigate)
   const pushNotification = useApp((s) => s.pushNotification)
@@ -256,6 +269,9 @@ function ActiveAccountHero({
               Change skin
             </Button>
           )}
+          <Button icon={BarChart3} onClick={onDetails}>
+            Stats &amp; details
+          </Button>
           {account.type === 'microsoft' && !expired && (
             <Button icon={RefreshCw} loading={refreshing} onClick={onRefresh}>
               Refresh session
@@ -264,7 +280,7 @@ function ActiveAccountHero({
         </div>
       </div>
 
-      <div className="acc-hero-model">
+      <button className="acc-hero-model" onClick={onDetails} title="View stats and details">
         {skin ? (
           <motion.div
             key={skin.dataUrl}
@@ -279,7 +295,7 @@ function ActiveAccountHero({
             <User size={72} strokeWidth={1.25} />
           </span>
         )}
-      </div>
+      </button>
     </section>
   )
 }
@@ -288,15 +304,18 @@ function ActiveAccountHero({
 
 function AccountCard({
   account,
+  stats,
   active,
   refreshing,
   signingIn,
   onUse,
   onRefresh,
   onSignIn,
-  onRemove
+  onRemove,
+  onOpen
 }: {
   account: Account
+  stats: AccountStats | undefined
   active: boolean
   refreshing: boolean
   signingIn: boolean
@@ -304,10 +323,22 @@ function AccountCard({
   onRefresh: () => void
   onSignIn: () => void
   onRemove: () => void
+  onOpen: () => void
 }): ReactNode {
   const expired = account.type === 'microsoft' && account.needsRelogin
+  const played = !!stats && stats.launches > 0
   return (
-    <motion.div layout className={`acc-card ${active ? 'active' : ''} ${expired ? 'expired' : ''}`}>
+    <motion.div
+      layout
+      role="button"
+      tabIndex={0}
+      title="View stats and details"
+      className={`acc-card ${active ? 'active' : ''} ${expired ? 'expired' : ''}`}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && e.key === 'Enter') onOpen()
+      }}
+    >
       <div className="acc-card-head">
         <Avatar username={account.type === 'microsoft' ? account.username : ''} size={52} radius={12} />
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -323,11 +354,31 @@ function AccountCard({
             <Check size={12} /> In use
           </span>
         )}
+        <ChevronRight size={16} className="acc-card-chev" />
       </div>
 
       <div className="tiny acc-card-status">{statusLine(account)}</div>
 
-      <div className="acc-card-actions">
+      <div className="acc-card-stats tiny">
+        {played ? (
+          <>
+            <span title="Play time">
+              <Timer size={12} /> {formatPlayTime(stats.playTimeSeconds)}
+            </span>
+            <span title="Launches">
+              <Rocket size={12} /> {stats.launches} {stats.launches === 1 ? 'launch' : 'launches'}
+            </span>
+            <span title="Last played">
+              <Clock size={12} /> {formatRelative(stats.lastPlayed)}
+            </span>
+          </>
+        ) : (
+          <span>No games played yet</span>
+        )}
+      </div>
+
+      {/* The card itself opens the details, so its buttons must not bubble up. */}
+      <div className="acc-card-actions" onClick={(e) => e.stopPropagation()}>
         {expired ? (
           <Button variant="primary" icon={LogIn} loading={signingIn} onClick={onSignIn}>
             Sign in

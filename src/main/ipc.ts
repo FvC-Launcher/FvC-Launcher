@@ -6,6 +6,7 @@ import { notify } from './broadcast'
 import { paths } from './paths'
 import { settingsService } from './services/settings'
 import { accountsService } from './services/accounts'
+import { accountStatsService } from './services/accountStats'
 import { profilesService } from './services/profiles'
 import { packUpdaterService } from './services/packUpdater'
 import { contentService } from './services/content'
@@ -58,7 +59,9 @@ export function registerIpc(): void {
   ipcMain.handle(CH.accountsRemove, (_e, id) => {
     accountsService.remove(id)
     skinsService.forget(id)
+    accountStatsService.forget(id)
   })
+  ipcMain.handle(CH.accountsStats, () => accountStatsService.all())
 
   // Profiles
   ipcMain.handle(CH.profilesList, () => profilesService.list())
@@ -171,6 +174,7 @@ export function registerIpc(): void {
     skinsService.apply(accountId, dataUrl, model)
   )
   ipcMain.handle(CH.skinsRemove, (_e, accountId) => skinsService.remove(accountId))
+  ipcMain.handle(CH.skinsForAccount, (_e, accountId) => skinsService.forAccount(accountId))
 
   // Modpacks
   ipcMain.handle(CH.modpackInstall, (_e, input) => modpacksService.install(input))

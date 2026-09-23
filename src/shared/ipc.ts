@@ -5,6 +5,8 @@
 
 import type {
   Account,
+  AccountAppearance,
+  AccountStats,
   AppSettings,
   AppliedSkin,
   CommunityPack,
@@ -110,6 +112,9 @@ export interface FvcApi {
     loginMicrosoft(): Promise<Account>
     refresh(id: string): Promise<Account>
     remove(id: string): Promise<void>
+    /** Play statistics for every account, keyed by account id. */
+    stats(): Promise<Record<string, AccountStats>>
+    onStatsChanged(cb: () => void): () => void
   }
   profiles: {
     list(): Promise<Profile[]>
@@ -193,6 +198,8 @@ export interface FvcApi {
     /** Saves the skin for an offline account and uploads it to the skin server. */
     apply(accountId: string, dataUrl: string, model: SkinModel): Promise<AppliedSkin>
     remove(accountId: string): Promise<void>
+    /** The skin (and cape) an account currently wears, for the account details dialog. */
+    forAccount(accountId: string): Promise<AccountAppearance>
     /** Fires when a skin was changed from inside the game. */
     onChanged(cb: () => void): () => void
   }
@@ -260,6 +267,8 @@ export const CH = {
   accountsRefresh: 'accounts:refresh',
   accountsRemove: 'accounts:remove',
   accountsChanged: 'accounts:changed',
+  accountsStats: 'accounts:stats',
+  accountStatsChanged: 'accounts:statsChanged',
 
   profilesList: 'profiles:list',
   profilesCreate: 'profiles:create',
@@ -321,6 +330,7 @@ export const CH = {
   skinsGetApplied: 'skins:getApplied',
   skinsApply: 'skins:apply',
   skinsRemove: 'skins:remove',
+  skinsForAccount: 'skins:forAccount',
   skinsChanged: 'skins:changed',
 
   modpackInstall: 'modpacks:install',

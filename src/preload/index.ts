@@ -27,7 +27,9 @@ const api: FvcApi = {
     addOffline: (username) => ipcRenderer.invoke(CH.accountsAddOffline, username),
     loginMicrosoft: () => ipcRenderer.invoke(CH.accountsLoginMs),
     refresh: (id) => ipcRenderer.invoke(CH.accountsRefresh, id),
-    remove: (id) => ipcRenderer.invoke(CH.accountsRemove, id)
+    remove: (id) => ipcRenderer.invoke(CH.accountsRemove, id),
+    stats: () => ipcRenderer.invoke(CH.accountsStats),
+    onStatsChanged: (cb) => subscribe(CH.accountStatsChanged, cb)
   },
   profiles: {
     list: () => ipcRenderer.invoke(CH.profilesList),
@@ -99,6 +101,7 @@ const api: FvcApi = {
     getApplied: (accountId) => ipcRenderer.invoke(CH.skinsGetApplied, accountId),
     apply: (accountId, dataUrl, model) => ipcRenderer.invoke(CH.skinsApply, accountId, dataUrl, model),
     remove: (accountId) => ipcRenderer.invoke(CH.skinsRemove, accountId),
+    forAccount: (accountId) => ipcRenderer.invoke(CH.skinsForAccount, accountId),
     onChanged: (cb) => subscribe(CH.skinsChanged, cb)
   },
   news: {

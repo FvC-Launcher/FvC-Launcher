@@ -8,6 +8,7 @@ import { CH } from '@shared/ipc'
 import { profilesService } from './profiles'
 import { packUpdaterService } from './packUpdater'
 import { accountsService } from './accounts'
+import { accountStatsService } from './accountStats'
 import { settingsService } from './settings'
 import { downloadsService } from './downloads'
 import { javaService, requiredJavaMajor } from './java'
@@ -217,6 +218,7 @@ export const launchService = {
           gameStartedAt = Date.now()
           setState({ phase: 'running', detail: 'Game running', progress: -1, startedAt: gameStartedAt })
           tracker.finish(true)
+          accountStatsService.recordLaunch(accountId, profileId)
           const behavior = settingsService.get().afterLaunch
           const win = BrowserWindow.getAllWindows()[0]
           if (behavior === 'minimize') win?.minimize()
@@ -233,7 +235,9 @@ export const launchService = {
       client.on('close', (code: number) => {
         tracker.finish(true)
         if (gameStartedAt > 0) {
-          profilesService.addPlaySession(profileId, (Date.now() - gameStartedAt) / 1000)
+          const seconds = (Date.now() - gameStartedAt) / 1000
+          profilesService.addPlaySession(profileId, seconds)
+          accountStatsService.recordSession(accountId, profileId, seconds)
           gameStartedAt = 0
         }
         try {

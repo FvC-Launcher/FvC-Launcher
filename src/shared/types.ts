@@ -60,6 +60,35 @@ export interface AppliedSkin {
   shared: boolean
 }
 
+/** How an account looks in game, for the account details dialog. */
+export interface AccountAppearance {
+  /** Null when no texture could be loaded (e.g. offline with no network). */
+  skin: {
+    dataUrl: string
+    model: SkinModel
+    /** mojang = the account's own skin, fvc = applied via FvC Skins, default = Steve/Alex etc. */
+    source: 'mojang' | 'fvc' | 'default'
+  } | null
+  /** The cape texture (64x32) when the Microsoft account has one equipped. */
+  capeDataUrl?: string
+  /** FvC Skins only: when it was applied and whether other players can see it. */
+  appliedAt?: string
+  shared?: boolean
+}
+
+/** Play statistics per account, recorded by the launcher from v3.1.0 on. */
+export interface AccountStats {
+  /** Games that reached the game window. */
+  launches: number
+  playTimeSeconds: number
+  longestSessionSeconds: number
+  firstPlayed?: string
+  lastPlayed?: string
+  lastProfileId?: string
+  /** Play time and launches per profile id. */
+  profiles: Record<string, { seconds: number; launches: number }>
+}
+
 // ----------------------------------- Profiles ------------------------------
 
 export type LoaderId = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'

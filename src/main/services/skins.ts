@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto'
 import { JsonStore } from '../store'
 import { paths } from '../paths'
 import { accountsService } from './accounts'
-import type { AppliedSkin, Profile, ResolvedSkin, SkinModel } from '@shared/types'
+import type { AccountAppearance, AppliedSkin, Profile, ResolvedSkin, SkinModel } from '@shared/types'
 
 /**
  * The deployed skin-server/ Worker, without a trailing slash. While empty,
@@ -30,6 +30,11 @@ const MOJANG_PROFILE = 'https://api.mojang.com/users/profiles/minecraft'
 const MOJANG_SESSION = 'https://sessionserver.mojang.com/session/minecraft/profile'
 /** Serves the correct default skin for a uuid when the profile has none. */
 const DEFAULT_SKIN = 'https://api.mcheads.org/skin'
+/** Mojang's current Steve and Alex textures, for accounts without a skin of their own. */
+const DEFAULT_STEVE =
+  'https://textures.minecraft.net/texture/31f477eb1a7beee631c2ca64d06f8f68fa93a3386d04452ab27f43acdf1b60cb'
+const DEFAULT_ALEX =
+  'https://textures.minecraft.net/texture/fb9ab3483f8106ecc9e76bd47c71312b0f16a58784d606864f3b3e9cb1fd7b6c'
 
 const NAME_RE = /^[A-Za-z0-9_]{1,16}$/
 const MAX_BYTES = 2 * 1024 * 1024
@@ -37,6 +42,7 @@ const MAX_BYTES = 2 * 1024 * 1024
 // Same query -> same texture for a few minutes; the page re-resolves on every
 // preview click and Mojang rate-limits name lookups fairly aggressively.
 const cache = new Map<string, { at: number; skin: ResolvedSkin }>()
+const appearanceCache = new Map<string, { at: number; appearance: AccountAppearance }>()
 const CACHE_TTL = 5 * 60_000
 
 interface MojangProfile {
@@ -53,6 +59,7 @@ interface SessionProfile {
 interface TexturesPayload {
   textures?: {
     SKIN?: { url: string; metadata?: { model?: string } }
+    CAPE?: { url: string }
   }
 }
 
@@ -117,6 +124,24 @@ async function resolveUsername(name: string): Promise<ResolvedSkin> {
     uuid: profile.id,
     textureUrl,
     isDefault: !skin
+  }
+}
+
+/** The skin Minecraft gives a uuid that has no skin of its own. */
+async function defaultSkin(uuid: string): Promise<AccountAppearance['skin']> {
+  // Java's UUID.hashCode() is the XOR of its four 32-bit words, so its parity
+  // is the XOR of each word's lowest bit. Odd hashes get Alex. (1.19.3+ picks
+  // from nine defaults, but Steve/Alex is close enough for a preview, and
+  // offline uuids are unknown to skin APIs, so they can't answer for us.)
+  const hex = uuid.replace(/-/g, '')
+  let parity = 0
+  for (let i = 7; i < 32; i += 8) parity ^= parseInt(hex[i], 16) & 1
+  const slim = parity === 1
+  try {
+    const dataUrl = await fetchTexture(slim ? DEFAULT_ALEX : DEFAULT_STEVE)
+    return { dataUrl, model: slim ? 'slim' : 'classic', source: 'default' }
+  } catch {
+    return null
   }
 }
 
@@ -367,6 +392,51 @@ export const skinsService = {
       model: applied?.model ?? 'classic'
     }
     writeFileSync(join(configDir, 'fvc-skins.json'), JSON.stringify(config, null, 2), 'utf-8')
+  },
+
+  /**
+   * What the account wears in game: a Microsoft account's Mojang skin and cape,
+   * the skin applied to an offline account via FvC Skins, or the default skin.
+   */
+  async forAccount(accountId: string): Promise<AccountAppearance> {
+    const account = accountsService.list().find((a) => a.id === accountId)
+    if (!account) throw new Error('Account not found.')
+
+    if (account.type === 'offline') {
+      const applied = this.getApplied(accountId)
+      if (!applied) return { skin: await defaultSkin(account.uuid) }
+      return {
+        skin: { dataUrl: applied.dataUrl, model: applied.model, source: 'fvc' },
+        appliedAt: applied.appliedAt,
+        shared: applied.shared
+      }
+    }
+
+    const uuid = account.uuid.replace(/-/g, '')
+    const hit = appearanceCache.get(uuid)
+    if (hit && Date.now() - hit.at < CACHE_TTL) return hit.appearance
+
+    const session = await getJson<SessionProfile>(`${MOJANG_SESSION}/${uuid}`)
+    const encoded = session?.properties?.find((p) => p.name === 'textures')?.value
+    const textures = encoded
+      ? (JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')) as TexturesPayload)
+      : {}
+    const skin = textures.textures?.SKIN
+    const cape = textures.textures?.CAPE
+
+    const appearance: AccountAppearance = {
+      skin: skin
+        ? {
+            dataUrl: await fetchTexture(skin.url),
+            model: skin.metadata?.model === 'slim' ? 'slim' : 'classic',
+            source: 'mojang'
+          }
+        : await defaultSkin(uuid),
+      // A cape that fails to load shouldn't hide the skin.
+      capeDataUrl: cape ? await fetchTexture(cape.url).catch(() => undefined) : undefined
+    }
+    appearanceCache.set(uuid, { at: Date.now(), appearance })
+    return appearance
   },
 
   /** Accepts a direct https:// link to a skin PNG, or a Minecraft username. */
