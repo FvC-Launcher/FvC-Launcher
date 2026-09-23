@@ -13,9 +13,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /** Finds skin textures the same ways the launcher's Skin page does: a player name, a link, or a file. */
 public final class SkinSource {
@@ -30,8 +32,9 @@ public final class SkinSource {
 	}
 
 	private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_]{1,16}$");
+	private static final String SESSION = "https://sessionserver.mojang.com/session/minecraft/profile/";
 	private static final int MAX_BYTES = 64 * 1024;
-	private static final String UA = "FvC-Skins/1.1 (github.com/FvC-Launcher)";
+	private static final String UA = "FvC-Skins/1.2 (github.com/FvC-Launcher)";
 	private static final HttpClient HTTP = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(10))
 			.followRedirects(HttpClient.Redirect.NORMAL)
@@ -90,14 +93,25 @@ public final class SkinSource {
 			if (profile == null) throw new SkinException("No Minecraft account is named \"" + name + "\".");
 			String id = profile.get("id").getAsString();
 			String realName = profile.get("name").getAsString();
-			return getJson("https://sessionserver.mojang.com/session/minecraft/profile/" + id).thenCompose(session -> {
+			return getJson(SESSION + id).thenCompose(session -> {
 				JsonObject skin = session != null ? skinTexture(session) : null;
 				if (skin == null) throw new SkinException(realName + " uses a default skin, so there's nothing to copy.");
-				boolean slim = skin.has("metadata")
-						&& "slim".equals(skin.getAsJsonObject("metadata").get("model").getAsString());
-				return download(skin.get("url").getAsString()).thenApply(png -> new Found(png, slim, realName));
+				return download(skin.get("url").getAsString()).thenApply(png -> new Found(png, isSlim(skin), realName));
 			});
 		});
+	}
+
+	/** The custom skin a profile wears on Mojang right now, or null for a default one. Completes off the render thread. */
+	public static CompletableFuture<@Nullable Found> ofProfile(UUID id, String label) {
+		return getJson(SESSION + id.toString().replace("-", "")).thenCompose(session -> {
+			JsonObject skin = session != null ? skinTexture(session) : null;
+			if (skin == null) return CompletableFuture.completedFuture(null);
+			return download(skin.get("url").getAsString()).thenApply(png -> new Found(png, isSlim(skin), label));
+		});
+	}
+
+	private static boolean isSlim(JsonObject skin) {
+		return skin.has("metadata") && "slim".equals(skin.getAsJsonObject("metadata").get("model").getAsString());
 	}
 
 	private static JsonObject skinTexture(JsonObject session) {

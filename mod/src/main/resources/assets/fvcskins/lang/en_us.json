@@ -3,6 +3,7 @@
 	"fvcskins.screen.title": "Change Skin",
 	"fvcskins.subtitle": "Playing as %s",
 	"fvcskins.subtitle.readonly": "Playing as %s · preview only",
+	"fvcskins.subtitle.premium": "Playing as %s · Microsoft account",
 
 	"fvcskins.label.find": "Find a skin",
 	"fvcskins.label.arms": "Arm width",
@@ -28,9 +29,11 @@
 	"fvcskins.apply": "Apply skin",
 	"fvcskins.reset": "Use default",
 	"fvcskins.reset.tooltip": "Go back to the default skin, for you and for other FvC Launcher players.",
+	"fvcskins.reset.tooltip_premium": "Reset your Minecraft account to the default skin. The skin you wear now is kept under Recently worn.",
 
 	"fvcskins.status.intro": "Search a player to copy their skin, paste a link to a skin PNG, or drop a PNG onto this window.",
-	"fvcskins.status.microsoft": "Microsoft accounts always wear their Mojang skin. Change it on minecraft.net; you can still preview skins here.",
+	"fvcskins.status.intro_premium": "This changes your real Minecraft skin, on every server. Search a player, paste a skin link or drop a PNG onto this window.",
+	"fvcskins.status.microsoft": "Your Microsoft session isn’t available in game, so you can only preview skins. Start the game from FvC Launcher to change it here.",
 	"fvcskins.status.no_launcher": "Launch the game from FvC Launcher with an offline account to change your skin here. You can still preview skins.",
 	"fvcskins.status.looking_up": "Looking up player",
 	"fvcskins.status.downloading": "Downloading skin",
@@ -44,6 +47,8 @@
 	"fvcskins.status.applying": "Applying",
 	"fvcskins.status.applied": "Done! You're wearing your new skin. Other FvC Launcher players see it within a few minutes.",
 	"fvcskins.status.applied_local": "Applied, but the skin server couldn't be reached, so only you see it for now. FvC Launcher retries at the next launch.",
+	"fvcskins.status.applied_premium": "Done! This is now your Minecraft skin. Other players see it the next time you join a server.",
 	"fvcskins.status.resetting": "Switching to the default skin",
-	"fvcskins.status.reset": "You're back to the default skin."
+	"fvcskins.status.reset": "You're back to the default skin.",
+	"fvcskins.status.reset_premium": "Your Minecraft account is back to the default skin. Your old skin is under Recently worn."
 }

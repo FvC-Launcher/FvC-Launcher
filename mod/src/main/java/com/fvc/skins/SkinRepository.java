@@ -12,11 +12,13 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.PlayerModelType;
@@ -48,6 +50,10 @@ public final class SkinRepository {
 	private static byte @Nullable [] ownBytes;
 	private static boolean ownLoaded;
 	private static @Nullable Supplier<PlayerSkin> vanillaOwn;
+	/** What a Microsoft account wears after changing its skin this session (Mojang lags behind). */
+	private static @Nullable Skin premiumSkin;
+	/** The PNG of {@link #premiumSkin}; null when it's the default skin, which we don't own. */
+	private static byte @Nullable [] premiumBytes;
 
 	private static final class Entry {
 		volatile @Nullable Skin skin;
@@ -72,18 +78,43 @@ public final class SkinRepository {
 	}
 
 	/**
-	 * Only offline accounts launched by FvC Launcher can change skins here: Microsoft
-	 * accounts always show their Mojang skin, and the skin server knows names, not sessions.
+	 * A Microsoft session, which changes its real skin through Mojang. Offline launches pass
+	 * a placeholder access token; a Microsoft one is a JWT (three dot-separated parts).
+	 */
+	public static boolean isPremium() {
+		if (config.offline()) return false;
+		String token = Minecraft.getInstance().getUser().getAccessToken();
+		return token != null && token.split("\\.", -1).length == 3;
+	}
+
+	/**
+	 * Microsoft accounts change their real Mojang skin; offline accounts launched by
+	 * FvC Launcher change the skin the FvC skin server hands out for their name.
 	 */
 	public static boolean canChangeSkin() {
+		if (isPremium()) return true;
 		String name = Minecraft.getInstance().getUser().getName();
 		return config.offline() && config.username() != null && config.username().equalsIgnoreCase(name);
 	}
 
-	/** Your skin as everyone sees it: the FvC one if set, otherwise whatever vanilla resolves. */
+	/** Whether "Use default" would change anything we know of. */
+	public static boolean canReset() {
+		if (isPremium()) return premiumSkin == null || premiumBytes != null;
+		return ownBytes() != null;
+	}
+
+	/** Your skin as everyone sees it: a skin changed this session, the FvC one, or whatever vanilla resolves. */
 	public static PlayerSkin currentSkin() {
+		if (premiumSkin != null) {
+			PlayerSkin vanilla = vanillaOwn();
+			return new PlayerSkin(premiumSkin.texture(), vanilla.cape(), vanilla.elytra(), premiumSkin.model(), false);
+		}
 		Skin own = ownKey != null ? own() : null;
 		if (own != null) return PlayerSkin.insecure(own.texture(), null, null, own.model());
+		return vanillaOwn();
+	}
+
+	private static PlayerSkin vanillaOwn() {
 		if (vanillaOwn == null) {
 			Minecraft mc = Minecraft.getInstance();
 			vanillaOwn = mc.getSkinManager().createLookup(mc.getGameProfile(), false);
@@ -91,14 +122,44 @@ public final class SkinRepository {
 		return vanillaOwn.get();
 	}
 
-	/** The PNG of your FvC skin, or null when you wear the default one. */
+	/** The PNG of the skin you changed to, or null when it's a default one (or unknown). */
 	public static byte @Nullable [] ownBytes() {
+		if (premiumSkin != null) return premiumBytes;
 		if (ownKey != null) own();
 		return ownBytes;
 	}
 
 	public static boolean ownSlim() {
-		return ownSkin != null && ownSkin.model() == PlayerModelType.SLIM;
+		Skin skin = premiumSkin != null ? premiumSkin : ownSkin;
+		return skin != null && skin.model() == PlayerModelType.SLIM;
+	}
+
+	/**
+	 * Your Microsoft account's skin after a change this session, for the player with that
+	 * profile id; null for anyone else. Others see the change when you next join a server.
+	 */
+	public static @Nullable Skin premiumOverride(@Nullable UUID profileId) {
+		if (premiumSkin == null || profileId == null) return null;
+		return profileId.equals(Minecraft.getInstance().getUser().getProfileId()) ? premiumSkin : null;
+	}
+
+	/** Must run on the render thread. {@code png == null} means the default skin. */
+	static boolean setPremium(byte @Nullable [] png, boolean slim) {
+		Skin previous = premiumSkin;
+		boolean ownedPrevious = premiumBytes != null;
+		Skin next;
+		if (png != null) {
+			next = register("premium", png, slim);
+			if (next == null) return false;
+		} else {
+			PlayerSkin fallback = DefaultPlayerSkin.get(Minecraft.getInstance().getUser().getProfileId());
+			next = new Skin(fallback.body(), fallback.model());
+		}
+		premiumSkin = next;
+		premiumBytes = png;
+		// The default texture belongs to the game; only release textures we registered.
+		if (ownedPrevious) release(previous);
+		return true;
 	}
 
 	/** Must run on the render thread. */

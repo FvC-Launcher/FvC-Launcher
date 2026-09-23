@@ -184,7 +184,10 @@ function statusLine(account: Account): string {
 
 // ============================================================== Hero
 
-/** Microsoft accounts show their real skin; offline ones show the skin applied via FvC Skins. */
+/**
+ * Microsoft accounts show their real skin (including one just changed, which Mojang's
+ * public lookups lag behind); offline ones the skin applied via FvC Skins, or the default.
+ */
 function useAccountSkin(account: Account): { dataUrl: string; model: SkinModel } | null {
   const [skin, setSkin] = useState<{ dataUrl: string; model: SkinModel } | null>(null)
 
@@ -192,12 +195,9 @@ function useAccountSkin(account: Account): { dataUrl: string; model: SkinModel }
     setSkin(null)
     let cancelled = false
     const refresh = (): void => {
-      const load =
-        account.type === 'offline'
-          ? window.fvc.skins.getApplied(account.id)
-          : window.fvc.skins.resolve(account.username)
-      load
-        .then((s) => {
+      window.fvc.skins
+        .forAccount(account.id)
+        .then(({ skin: s }) => {
           if (!cancelled) setSkin(s ? { dataUrl: s.dataUrl, model: s.model } : null)
         })
         .catch(() => {

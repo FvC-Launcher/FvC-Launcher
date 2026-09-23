@@ -68,6 +68,8 @@ export interface AccountAppearance {
     model: SkinModel
     /** mojang = the account's own skin, fvc = applied via FvC Skins, default = Steve/Alex etc. */
     source: 'mojang' | 'fvc' | 'default'
+    /** Permanent textures.minecraft.net link of a Mojang skin, so it can be worn again later. */
+    textureUrl?: string
   } | null
   /** The cape texture (64x32) when the Microsoft account has one equipped. */
   capeDataUrl?: string

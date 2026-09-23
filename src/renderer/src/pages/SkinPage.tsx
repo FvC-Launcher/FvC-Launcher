@@ -9,6 +9,7 @@ import {
   Info,
   Layers,
   Link2,
+  RotateCcw,
   Search,
   Shirt,
   Trash2,
@@ -16,10 +17,10 @@ import {
   UserCheck,
   X
 } from 'lucide-react'
-import { Avatar, Button, Input } from '@/components/ui'
+import { Avatar, Button, ConfirmDialog, Input } from '@/components/ui'
 import { SkinViewer } from '@/components/SkinViewer'
 import { useApp } from '@/store'
-import type { AppliedSkin, ResolvedSkin, SkinModel } from '@shared/types'
+import type { AccountAppearance, AppliedSkin, ResolvedSkin, SkinModel } from '@shared/types'
 
 /** Remembered across navigations and restarts — the lookup itself is cheap. */
 const STORAGE_KEY = 'fvc.skin.query'
@@ -57,6 +58,8 @@ function shortLink(url: string): string {
   try {
     const u = new URL(url)
     const file = u.pathname.split('/').filter(Boolean).pop()
+    // Kept before a Microsoft account's skin was replaced.
+    if (u.hostname === 'textures.minecraft.net' && file) return `Saved skin ${file.slice(0, 6)}`
     return file ? `${u.hostname}/…/${file}` : u.hostname
   } catch {
     return url
@@ -77,20 +80,36 @@ export function SkinPage(): ReactNode {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [applied, setApplied] = useState<AppliedSkin | null>(null)
+  /** What a Microsoft account wears on Mojang right now. */
+  const [premium, setPremium] = useState<AccountAppearance['skin']>(null)
   const [applying, setApplying] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
   const restored = useRef(false)
 
   const activeAccount = accounts.find((a) => a.id === activeId) ?? null
   const isMicrosoft = activeAccount?.type === 'microsoft'
   const isOffline = activeAccount?.type === 'offline'
-  const hasOffline = accounts.some((a) => a.type === 'offline')
+  const expired = isMicrosoft && !!activeAccount.needsRelogin
+  /** Offline accounts wear skins through FvC Skins; Microsoft ones get their real skin changed. */
+  const canWear = isOffline || (isMicrosoft && !expired)
+  const current = isOffline ? applied : premium
 
   useEffect(() => {
     setApplied(null)
-    if (!activeAccount || activeAccount.type !== 'offline') return
+    setPremium(null)
+    if (!activeAccount) return
     let cancelled = false
     const refresh = (): void => {
-      void window.fvc.skins.getApplied(activeAccount.id).then((s) => !cancelled && setApplied(s))
+      if (activeAccount.type === 'offline') {
+        void window.fvc.skins.getApplied(activeAccount.id).then((s) => !cancelled && setApplied(s))
+      } else {
+        window.fvc.skins
+          .forAccount(activeAccount.id)
+          .then((a) => !cancelled && setPremium(a.skin))
+          .catch(() => {
+            // Mojang unreachable — the swatch just stays empty.
+          })
+      }
     }
     refresh()
     const unsubscribe = window.fvc.skins.onChanged(refresh)
@@ -100,23 +119,47 @@ export function SkinPage(): ReactNode {
     }
   }, [activeAccount?.id, activeAccount?.type])
 
-  const showApplied = (s: AppliedSkin): void => {
+  const showCurrent = (): void => {
+    if (!current) return
     setSkin({
-      dataUrl: s.dataUrl,
-      model: s.model,
+      dataUrl: current.dataUrl,
+      model: current.model,
       source: 'applied',
       username: activeAccount?.username,
-      textureUrl: `applied:${s.appliedAt}`
+      textureUrl: `current:${current.dataUrl.length}:${current.model}`
     })
-    setModel(s.model)
+    setModel(current.model)
     setError(null)
+  }
+
+  const pushRecent = (label: string): void => {
+    setRecent((prev) => {
+      const next = [label, ...prev.filter((q) => q.toLowerCase() !== label.toLowerCase())].slice(0, RECENT_MAX)
+      writeRecent(next)
+      return next
+    })
+  }
+
+  /** A replaced Mojang skin is gone unless you still have the file, so keep its link in Recent. */
+  const keepPremiumSkin = (): void => {
+    if (premium?.source === 'mojang' && premium.textureUrl) pushRecent(premium.textureUrl)
   }
 
   const apply = async (): Promise<void> => {
     if (!skin || !activeAccount) return
     setApplying(true)
     try {
+      if (isMicrosoft) keepPremiumSkin()
       const result = await window.fvc.skins.apply(activeAccount.id, skin.dataUrl, model)
+      if (isMicrosoft) {
+        setPremium({ dataUrl: result.dataUrl, model: result.model, source: 'mojang' })
+        pushNotification({
+          type: 'success',
+          title: 'Skin changed',
+          body: `${activeAccount.username} wears it on every server now. Servers you’re on show it after you rejoin.`
+        })
+        return
+      }
       setApplied(result)
       pushNotification(
         result.shared
@@ -146,16 +189,29 @@ export function SkinPage(): ReactNode {
     if (!activeAccount) return
     setApplying(true)
     try {
+      if (isMicrosoft) keepPremiumSkin()
       await window.fvc.skins.remove(activeAccount.id)
       setApplied(null)
-      pushNotification({ type: 'info', title: 'Skin removed', body: `${activeAccount.username} is back to the default skin.` })
+      pushNotification({
+        type: 'info',
+        title: isMicrosoft ? 'Skin reset' : 'Skin removed',
+        body: isMicrosoft
+          ? `${activeAccount.username} is back to the default skin. Your old one is under Recent.`
+          : `${activeAccount.username} is back to the default skin.`
+      })
+    } catch (err) {
+      pushNotification({
+        type: 'error',
+        title: 'Could not reset the skin',
+        body: err instanceof Error ? err.message : String(err)
+      })
     } finally {
       setApplying(false)
     }
   }
 
   const alreadyApplied =
-    !!skin && !!applied && skin.dataUrl === applied.dataUrl && model === applied.model
+    !!skin && !!current && skin.dataUrl === current.dataUrl && model === current.model
 
   const load = async (raw: string): Promise<void> => {
     const trimmed = raw.trim()
@@ -172,12 +228,7 @@ export function SkinPage(): ReactNode {
       } catch {
         // Private mode / storage disabled — the preview still works.
       }
-      const label = resolved.source === 'username' && resolved.username ? resolved.username : trimmed
-      setRecent((prev) => {
-        const next = [label, ...prev.filter((q) => q.toLowerCase() !== label.toLowerCase())].slice(0, RECENT_MAX)
-        writeRecent(next)
-        return next
-      })
+      pushRecent(resolved.source === 'username' && resolved.username ? resolved.username : trimmed)
     } catch (err) {
       setSkin(null)
       setError(err instanceof Error ? err.message : String(err))
@@ -216,13 +267,13 @@ export function SkinPage(): ReactNode {
         <div>
           <h1>Skin</h1>
           <div className="subtitle">
-            Preview any player’s skin or a texture link, then wear it on your offline account.
+            Preview any player’s skin or a texture link, then wear it on your account.
           </div>
         </div>
       </div>
 
       {/* ---------------------------------------------------- Target account */}
-      <div className={`skin-target ${isOffline ? '' : 'warn'}`}>
+      <div className={`skin-target ${canWear ? '' : 'warn'}`}>
         {activeAccount ? (
           <Avatar
             username={activeAccount.type === 'microsoft' ? activeAccount.username : ''}
@@ -236,14 +287,14 @@ export function SkinPage(): ReactNode {
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="skin-target-title">
-            {isOffline ? (
+            {activeAccount && !expired ? (
               <>
                 Skins apply to <strong>{activeAccount.username}</strong>
-                <span className="badge">Offline</span>
+                {isOffline ? <span className="badge">Offline</span> : <span className="badge success">Microsoft</span>}
               </>
-            ) : isMicrosoft ? (
+            ) : expired ? (
               <>
-                <strong>{activeAccount.username}</strong> is a Microsoft account
+                <strong>{activeAccount.username}</strong>’s session expired
               </>
             ) : (
               'No account selected'
@@ -252,14 +303,16 @@ export function SkinPage(): ReactNode {
           <div className="tiny">
             {isOffline
               ? 'Shows in game on Fabric 26.2 profiles, and to other FvC Launcher players on the same server.'
-              : isMicrosoft
-                ? 'Microsoft accounts always use their Mojang skin — change it on minecraft.net. You can still preview skins here.'
-                : 'Pick an offline account to apply skins to it.'}
+              : expired
+                ? 'Sign in again on the Accounts page to change this account’s skin.'
+                : isMicrosoft
+                  ? 'Changes your real Minecraft skin, so it shows on every server. You can also change it in game on Fabric 26.2 profiles.'
+                  : 'Add an account to wear a skin.'}
           </div>
         </div>
-        {!isOffline && (
+        {!canWear && (
           <Button icon={ExternalLink} onClick={() => navigate('accounts')}>
-            {hasOffline ? 'Switch account' : 'Add offline account'}
+            {activeAccount ? 'Go to accounts' : 'Add account'}
           </Button>
         )}
       </div>
@@ -445,10 +498,10 @@ export function SkinPage(): ReactNode {
             <div className="skin-panel-title">
               <Shirt size={15} /> Wear it
             </div>
-            {isOffline ? (
+            {canWear ? (
               <>
                 <div className="skin-compare">
-                  <SkinSwatch label="Now" dataUrl={applied?.dataUrl} model={applied?.model} />
+                  <SkinSwatch label="Now" dataUrl={current?.dataUrl} model={current?.model} />
                   <ArrowRight size={18} className="skin-compare-arrow" />
                   <SkinSwatch
                     label="Preview"
@@ -458,7 +511,18 @@ export function SkinPage(): ReactNode {
                   />
                 </div>
                 <p className="tiny" style={{ lineHeight: 1.5, marginTop: 12 }}>
-                  {applied ? (
+                  {isMicrosoft ? (
+                    <>
+                      <strong>{activeAccount.username}</strong>{' '}
+                      {premium?.source === 'mojang'
+                        ? 'is wearing their own skin.'
+                        : premium
+                          ? 'uses the default skin.'
+                          : 'is loading…'}{' '}
+                      Applying changes it on Mojang, so every server shows it. The skin you replace is kept
+                      under Recent.
+                    </>
+                  ) : applied ? (
                     <>
                       <strong>{activeAccount.username}</strong> is wearing a custom skin
                       {applied.shared
@@ -481,19 +545,30 @@ export function SkinPage(): ReactNode {
                 >
                   {alreadyApplied ? 'Already wearing this' : `Apply to ${activeAccount.username}`}
                 </Button>
-                {applied && (
+                {current && (
                   <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                    <Button icon={UserCheck} style={{ flex: 1 }} onClick={() => showApplied(applied)}>
+                    <Button icon={UserCheck} style={{ flex: 1 }} onClick={showCurrent}>
                       Show current
                     </Button>
-                    <Button
-                      variant="danger"
-                      icon={Trash2}
-                      disabled={applying}
-                      onClick={() => void removeApplied()}
-                    >
-                      Remove
-                    </Button>
+                    {isMicrosoft ? (
+                      <Button
+                        variant="danger"
+                        icon={RotateCcw}
+                        disabled={applying || premium?.source === 'default'}
+                        onClick={() => setConfirmReset(true)}
+                      >
+                        Reset
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        icon={Trash2}
+                        disabled={applying}
+                        onClick={() => void removeApplied()}
+                      >
+                        Remove
+                      </Button>
+                    )}
                   </div>
                 )}
               </>
@@ -501,15 +576,28 @@ export function SkinPage(): ReactNode {
               <div className="skin-locked">
                 <Info size={16} />
                 <span className="tiny">
-                  {hasOffline
-                    ? 'Select an offline account on the Accounts page to apply a skin to it.'
-                    : 'There is no offline account yet — add one on the Accounts page.'}
+                  {expired
+                    ? 'This account’s session expired. Sign in again on the Accounts page to change its skin.'
+                    : 'Add an account on the Accounts page to wear a skin.'}
                 </span>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title={`Reset ${activeAccount?.username}’s skin?`}
+        body="This sets your Minecraft account back to the default skin, on every server. The skin you wear now is saved under Recent so you can put it back."
+        confirmLabel="Reset skin"
+        danger
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => {
+          setConfirmReset(false)
+          void removeApplied()
+        }}
+      />
     </>
   )
 }

@@ -98,6 +98,28 @@ function mcAccountFromMsmc(mc: Minecraft, existingId?: string): StoredAccount {
   }
 }
 
+/**
+ * Restores a Microsoft session from its stored token (msmc refreshes it when
+ * close to expiry) and persists the rotated refresh token.
+ */
+async function refreshedSession(stored: StoredAccount): Promise<Minecraft> {
+  if (!stored.encryptedToken) throw new Error('Session missing. Please sign in again.')
+  let mc: Minecraft
+  try {
+    const auth = new Auth('select_account')
+    const token = JSON.parse(decryptToken(stored.encryptedToken))
+    mc = await tokenUtils.fromToken(auth, token, true)
+  } catch (err) {
+    throw asError(err)
+  }
+
+  const file = getStore().get()
+  const updated = mcAccountFromMsmc(mc, stored.id)
+  updated.addedAt = stored.addedAt
+  save({ ...file, accounts: file.accounts.map((a) => (a.id === stored.id ? updated : a)) })
+  return mc
+}
+
 export const accountsService = {
   list(): Account[] {
     return getStore().get().accounts.map(toPublic)
@@ -216,22 +238,17 @@ export const accountsService = {
       }
     }
 
-    if (!stored.encryptedToken) throw new Error('Session missing. Please sign in again.')
-    let mc: Minecraft
-    try {
-      const auth = new Auth('select_account')
-      const token = JSON.parse(decryptToken(stored.encryptedToken))
-      mc = await tokenUtils.fromToken(auth, token, true)
-    } catch (err) {
-      throw asError(err)
-    }
-
-    // Persist rotated refresh token.
-    const updated = mcAccountFromMsmc(mc, stored.id)
-    updated.addedAt = stored.addedAt
-    save({ ...file, accounts: file.accounts.map((a) => (a.id === stored.id ? updated : a)) })
-
+    const mc = await refreshedSession(stored)
     return mc.mclc(true) as unknown as Record<string, unknown>
+  },
+
+  /** A fresh Minecraft access token, for Microsoft-only APIs such as changing the skin. */
+  async getAccessToken(id: string): Promise<string> {
+    const stored = getStore().get().accounts.find((a) => a.id === id)
+    if (!stored) throw new Error('Account not found.')
+    if (stored.type !== 'microsoft') throw new Error('Only Microsoft accounts have a Minecraft session.')
+    const mc = await refreshedSession(stored)
+    return mc.mcToken
   },
 
   remove(id: string): void {

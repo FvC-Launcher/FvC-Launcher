@@ -12,15 +12,19 @@ import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Changes your skin from inside the game: uploads it to the FvC skin server (with the
- * secret the launcher passes in {@code FVC_SKINS_SECRET}), saves it into the instance
- * for the launcher to pick up, and swaps the texture you're wearing right away.
+ * Changes your skin from inside the game and swaps the texture you're wearing right away.
+ * Microsoft accounts change their real Mojang skin with the game's session. Offline accounts
+ * upload to the FvC skin server (with the secret the launcher passes in
+ * {@code FVC_SKINS_SECRET}) and save it into the instance for the launcher to pick up.
  */
 public final class SkinChanger {
-	/** {@code shared} is false when other players can't see it yet (server unreachable). */
-	public record Result(boolean shared) {}
+	/**
+	 * {@code shared} is false when other players can't see it yet (skin server unreachable);
+	 * {@code premium} when it changed the Microsoft account's real skin.
+	 */
+	public record Result(boolean shared, boolean premium) {}
 
-	private static final String UA = "FvC-Skins/1.1 (github.com/FvC-Launcher)";
+	private static final String UA = "FvC-Skins/1.2 (github.com/FvC-Launcher)";
 	private static final HttpClient HTTP = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(10))
 			.build();
@@ -34,6 +38,14 @@ public final class SkinChanger {
 		} catch (SkinSource.SkinException e) {
 			return CompletableFuture.failedFuture(e);
 		}
+		if (SkinRepository.isPremium()) {
+			return keepPremiumSkin().thenCompose(v -> MojangSkins.upload(png, slim)).thenApplyAsync(v -> {
+				if (!SkinRepository.setPremium(png, slim)) throw new SkinSource.SkinException("Minecraft could not load that skin.");
+				markPremiumChange();
+				RecentSkins.add(png, slim);
+				return new Result(true, true);
+			}, Minecraft.getInstance());
+		}
 		return upload("PUT", png, slim).thenApplyAsync(shared -> {
 			try {
 				SkinRepository.updateConfig(SkinRepository.config().withInGameChange(png, slim, shared));
@@ -43,12 +55,19 @@ public final class SkinChanger {
 			}
 			if (!SkinRepository.setOwn(png, slim)) throw new SkinSource.SkinException("Minecraft could not load that skin.");
 			RecentSkins.add(png, slim);
-			return new Result(shared);
+			return new Result(shared, false);
 		}, Minecraft.getInstance());
 	}
 
 	/** Back to the default skin, for you and for everyone else. Completes on the render thread. */
 	public static CompletableFuture<Result> reset() {
+		if (SkinRepository.isPremium()) {
+			return keepPremiumSkin().thenCompose(v -> MojangSkins.reset()).thenApplyAsync(v -> {
+				SkinRepository.setPremium(null, false);
+				markPremiumChange();
+				return new Result(true, true);
+			}, Minecraft.getInstance());
+		}
 		return upload("DELETE", null, false).thenApplyAsync(shared -> {
 			try {
 				SkinRepository.updateConfig(SkinRepository.config().withInGameChange(null, false, shared));
@@ -57,8 +76,33 @@ public final class SkinChanger {
 				throw new SkinSource.SkinException("Could not save the change into the game folder.");
 			}
 			SkinRepository.setOwn(null, false);
-			return new Result(shared);
+			return new Result(shared, false);
 		}, Minecraft.getInstance());
+	}
+
+	/**
+	 * Replacing a Microsoft account's skin loses it unless you still have the file, so keep
+	 * the one Mojang has now under Recently worn first. Best effort: never blocks the change.
+	 */
+	private static CompletableFuture<Void> keepPremiumSkin() {
+		// A skin changed earlier this session is in the recent list already.
+		if (SkinRepository.ownBytes() != null) return CompletableFuture.completedFuture(null);
+		return SkinSource.ofProfile(Minecraft.getInstance().getUser().getProfileId(), "")
+				.handle((found, error) -> {
+					if (found != null) RecentSkins.add(found.png(), found.slim());
+					else if (error != null) FvcSkins.LOGGER.warn("Could not keep your current skin", error);
+					return null;
+				});
+	}
+
+	/** Must run on the render thread. */
+	private static void markPremiumChange() {
+		try {
+			SkinRepository.config().markPremiumChange();
+		} catch (Exception e) {
+			// Only means the launcher shows the old skin for a few minutes.
+			FvcSkins.LOGGER.warn("Could not tell the launcher about the skin change", e);
+		}
 	}
 
 	/**

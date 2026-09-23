@@ -6,7 +6,6 @@ import {
   Check,
   Clock,
   Copy,
-  ExternalLink,
   Fingerprint,
   Globe,
   Hourglass,
@@ -29,7 +28,6 @@ import { formatPlayTime, formatRelative, useApp } from '@/store'
 import { profileIcon } from '@/lib'
 import type { Account, AccountAppearance, AccountStats } from '@shared/types'
 
-const MINECRAFT_SKIN_URL = 'https://www.minecraft.net/msaprofile/mygames/editskin'
 const MODEL_SCALE = 9
 
 export function StatusBadge({ account }: { account: Account }): ReactNode {
@@ -134,22 +132,16 @@ export function AccountDetailsModal({
           Refresh session
         </Button>
       )}
-      {shown.type === 'microsoft' ? (
-        <Button icon={ExternalLink} onClick={() => window.fvc.system.openExternal(MINECRAFT_SKIN_URL)}>
-          Edit skin on minecraft.net
+      {active && !expired && (
+        <Button
+          icon={Shirt}
+          onClick={() => {
+            onClose()
+            navigate('skin')
+          }}
+        >
+          Change skin
         </Button>
-      ) : (
-        active && (
-          <Button
-            icon={Shirt}
-            onClick={() => {
-              onClose()
-              navigate('skin')
-            }}
-          >
-            Change skin
-          </Button>
-        )
       )}
       {expired ? (
         <Button variant="primary" icon={LogIn} loading={signingIn} onClick={onSignIn}>

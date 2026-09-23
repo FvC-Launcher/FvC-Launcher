@@ -3,8 +3,10 @@ import { join } from 'path'
 import { randomBytes } from 'crypto'
 import { JsonStore } from '../store'
 import { paths } from '../paths'
+import { broadcast } from '../broadcast'
+import { CH } from '@shared/ipc'
 import { accountsService } from './accounts'
-import type { AccountAppearance, AppliedSkin, Profile, ResolvedSkin, SkinModel } from '@shared/types'
+import type { Account, AccountAppearance, AppliedSkin, Profile, ResolvedSkin, SkinModel } from '@shared/types'
 
 /**
  * The deployed skin-server/ Worker, without a trailing slash. While empty,
@@ -28,6 +30,8 @@ const MAX_APPLIED_BYTES = 64 * 1024
 const UA = 'FvC-Launcher (github.com/fvc-launcher)'
 const MOJANG_PROFILE = 'https://api.mojang.com/users/profiles/minecraft'
 const MOJANG_SESSION = 'https://sessionserver.mojang.com/session/minecraft/profile'
+/** Authenticated profile API; changes a Microsoft account's real skin. */
+const MC_PROFILE = 'https://api.minecraftservices.com/minecraft/profile'
 /** Serves the correct default skin for a uuid when the profile has none. */
 const DEFAULT_SKIN = 'https://api.mcheads.org/skin'
 /** Mojang's current Steve and Alex textures, for accounts without a skin of their own. */
@@ -239,6 +243,103 @@ async function share(username: string, png: Buffer, model: SkinModel): Promise<b
   }
 }
 
+// ------------------------------------------------ Microsoft (premium) skins
+
+interface ServicesProfile {
+  id: string
+  name: string
+  skins?: { state: string; url: string; variant?: string }[]
+  capes?: { state: string; url: string }[]
+}
+
+/** Calls the Minecraft services profile API as the account. */
+async function servicesRequest(account: Account, path: string, init: RequestInit): Promise<ServicesProfile> {
+  const token = await accountsService.getAccessToken(account.id)
+  let res: Response
+  try {
+    res = await fetch(`${MC_PROFILE}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': UA }
+    })
+  } catch {
+    throw new Error('Could not reach Mojang. Check your connection.')
+  }
+  if (res.status === 401) {
+    throw new Error('Mojang did not accept the session. Refresh it or sign in again on the Accounts page.')
+  }
+  if (res.status === 429) throw new Error('Mojang limits how often a skin can change. Try again in a minute.')
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { errorMessage?: string } | null
+    throw new Error(body?.errorMessage ? `Mojang rejected the skin: ${body.errorMessage}` : `Mojang returned error ${res.status}.`)
+  }
+  return (await res.json()) as ServicesProfile
+}
+
+/** Drops cached lookups of the account, so the next view fetches what it wears now. */
+function forgetPremium(account: Account): void {
+  appearanceCache.delete(account.uuid.replace(/-/g, ''))
+  for (const key of cache.keys()) {
+    if (key.toLowerCase() === account.username.toLowerCase()) cache.delete(key)
+  }
+}
+
+/**
+ * Mojang's session server takes a while to show a skin change, so remember
+ * what the account wears now, straight from the change's response.
+ */
+async function rememberPremium(account: Account, profile: ServicesProfile, skin: AccountAppearance['skin']): Promise<void> {
+  forgetPremium(account)
+  const cape = profile.capes?.find((c) => c.state === 'ACTIVE')
+  appearanceCache.set(account.uuid.replace(/-/g, ''), {
+    at: Date.now(),
+    appearance: { skin, capeDataUrl: cape ? await fetchTexture(cape.url).catch(() => undefined) : undefined }
+  })
+}
+
+async function applyPremium(account: Account, png: Buffer, model: SkinModel): Promise<AppliedSkin> {
+  const form = new FormData()
+  form.append('variant', model)
+  form.append('file', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'skin.png')
+  const profile = await servicesRequest(account, '/skins', { method: 'POST', body: form })
+
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`
+  const active = profile.skins?.find((s) => s.state === 'ACTIVE')
+  await rememberPremium(account, profile, {
+    dataUrl,
+    model,
+    source: 'mojang',
+    textureUrl: active ? https(active.url) : undefined
+  })
+  return { accountId: account.id, dataUrl, model, appliedAt: new Date().toISOString(), shared: true }
+}
+
+async function resetPremium(account: Account): Promise<void> {
+  const profile = await servicesRequest(account, '/skins/active', { method: 'DELETE' })
+  const active = profile.skins?.find((s) => s.state === 'ACTIVE')
+  const dataUrl = active ? await fetchTexture(active.url).catch(() => null) : null
+  const skin: AccountAppearance['skin'] = dataUrl
+    ? { dataUrl, model: active?.variant?.toLowerCase() === 'slim' ? 'slim' : 'classic', source: 'default' }
+    : await defaultSkin(account.uuid)
+  await rememberPremium(account, profile, skin)
+}
+
+/** Mojang hands out http:// texture links; the same files are served over https. */
+function https(url: string): string {
+  return url.replace(/^http:\/\//i, 'https://')
+}
+
+function decodeSkin(dataUrl: string): Buffer {
+  const match = /^data:image\/png;base64,(.+)$/.exec(dataUrl)
+  if (!match) throw new Error('That skin is not a PNG image.')
+  const png = Buffer.from(match[1], 'base64')
+  if (png.byteLength > MAX_APPLIED_BYTES) throw new Error('That skin file is too large (max 64 KB).')
+  const { width, height } = pngSize(png)
+  if (width !== 64 || (height !== 64 && height !== 32)) {
+    throw new Error(`A skin must be 64x64 (or 64x32), but that image is ${width}x${height}.`)
+  }
+  return png
+}
+
 export const skinsService = {
   getApplied(accountId: string): AppliedSkin | null {
     const record = getStore().get().applied[accountId]
@@ -253,32 +354,43 @@ export const skinsService = {
     }
   },
 
+  /**
+   * Microsoft accounts get their real Mojang skin changed; offline accounts get
+   * the skin saved locally and shared through the FvC skin server.
+   */
   async apply(accountId: string, dataUrl: string, model: SkinModel): Promise<AppliedSkin> {
-    const { username } = offlineAccount(accountId)
-    const match = /^data:image\/png;base64,(.+)$/.exec(dataUrl)
-    if (!match) throw new Error('That skin is not a PNG image.')
-    const png = Buffer.from(match[1], 'base64')
-    if (png.byteLength > MAX_APPLIED_BYTES) throw new Error('That skin file is too large (max 64 KB).')
-    const { width, height } = pngSize(png)
-    if (width !== 64 || (height !== 64 && height !== 32)) {
-      throw new Error(`A skin must be 64x64 (or 64x32), but that image is ${width}x${height}.`)
+    const png = decodeSkin(dataUrl)
+    const account = accountsService.list().find((a) => a.id === accountId)
+    if (account?.type === 'microsoft') {
+      const result = await applyPremium(account, png, model)
+      broadcast(CH.skinsChanged)
+      return result
     }
 
+    const { username } = offlineAccount(accountId)
     const shared = await share(username, png, model)
     mkdirSync(join(paths.userData, 'skins'), { recursive: true })
     writeFileSync(skinFile(accountId), png)
     saveRecord(accountId, { model, appliedAt: new Date().toISOString(), shared })
+    broadcast(CH.skinsChanged)
     return this.getApplied(accountId)!
   },
 
+  /** Back to the default skin: on the Mojang account for Microsoft accounts, locally and on the skin server otherwise. */
   async remove(accountId: string): Promise<void> {
     const account = accountsService.list().find((a) => a.id === accountId)
+    if (account?.type === 'microsoft') {
+      await resetPremium(account)
+      broadcast(CH.skinsChanged)
+      return
+    }
     if (SKIN_SERVER_URL && account) {
       await serverRequest('DELETE', account.username).catch((err) =>
         console.warn('[skins] delete failed:', err)
       )
     }
     this.forget(accountId)
+    broadcast(CH.skinsChanged)
   },
 
   /** Drops the local copy only (the account itself is gone). */
@@ -303,17 +415,23 @@ export const skinsService = {
       model?: string
       shared?: boolean
       changedInGame?: string
+      /** Set by the mod when a Microsoft account's real skin changed in game. */
+      premiumChangedInGame?: string
     }
     try {
       config = JSON.parse(readFileSync(configPath, 'utf-8'))
     } catch {
       return false
     }
-    if (!config.changedInGame) return false
+    if (!config.changedInGame && !config.premiumChangedInGame) return false
 
     const account = accountsService.list().find((a) => a.id === accountId)
-    const matches =
-      account?.type === 'offline' && account.username.toLowerCase() === config.username?.toLowerCase()
+    const sameName = account?.username.toLowerCase() === config.username?.toLowerCase()
+    // The skin lives on Mojang, so there's nothing to copy; just stop showing the old one.
+    const premium = !!config.premiumChangedInGame && account?.type === 'microsoft' && sameName
+    if (premium) forgetPremium(account)
+
+    const matches = !!config.changedInGame && account?.type === 'offline' && sameName
     if (matches) {
       const png = join(configDir, 'fvc-skins', 'skin.png')
       if (config.skin && existsSync(png)) {
@@ -321,7 +439,7 @@ export const skinsService = {
         writeFileSync(skinFile(accountId), readFileSync(png))
         saveRecord(accountId, {
           model: config.model === 'slim' ? 'slim' : 'classic',
-          appliedAt: config.changedInGame,
+          appliedAt: config.changedInGame ?? new Date().toISOString(),
           shared: Boolean(config.shared)
         })
       } else if (!config.skin) {
@@ -329,9 +447,9 @@ export const skinsService = {
       }
     }
     // Consumed either way, so it's never applied to a different account later.
-    const { changedInGame: _c, shared: _s, ...rest } = config
+    const { changedInGame: _c, shared: _s, premiumChangedInGame: _p, ...rest } = config
     writeFileSync(configPath, JSON.stringify(rest, null, 2), 'utf-8')
-    return matches
+    return matches || premium
   },
 
   /**
@@ -429,7 +547,8 @@ export const skinsService = {
         ? {
             dataUrl: await fetchTexture(skin.url),
             model: skin.metadata?.model === 'slim' ? 'slim' : 'classic',
-            source: 'mojang'
+            source: 'mojang',
+            textureUrl: https(skin.url)
           }
         : await defaultSkin(uuid),
       // A cape that fails to load shouldn't hide the skin.

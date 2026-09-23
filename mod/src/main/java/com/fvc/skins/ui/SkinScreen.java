@@ -81,7 +81,7 @@ public class SkinScreen extends Screen {
 
 	private Component introStatus() {
 		SkinConfig config = SkinRepository.config();
-		if (canChange) return Lang.tr("fvcskins.status.intro");
+		if (canChange) return Lang.tr(SkinRepository.isPremium() ? "fvcskins.status.intro_premium" : "fvcskins.status.intro");
 		if (config.username() != null && !config.offline()) return Lang.tr("fvcskins.status.microsoft");
 		return Lang.tr("fvcskins.status.no_launcher");
 	}
@@ -184,7 +184,9 @@ public class SkinScreen extends Screen {
 		if (canChange) {
 			resetButton = addRenderableWidget(new FlatButton(left, footerY, 96, 20, Lang.tr("fvcskins.reset"),
 					FlatButton.Style.SECONDARY, this::reset));
-			resetButton.setTooltip(Tooltip.create(Lang.tr("fvcskins.reset.tooltip")));
+			resetButton.setTooltip(Tooltip.create(Lang.tr(SkinRepository.isPremium()
+					? "fvcskins.reset.tooltip_premium"
+					: "fvcskins.reset.tooltip")));
 		}
 		int applyWidth = 100;
 		applyButton = addRenderableWidget(new FlatButton(left + contentWidth - applyWidth, footerY, applyWidth, 20,
@@ -208,7 +210,7 @@ public class SkinScreen extends Screen {
 		classicButton.active = !busy && hasTexture;
 		slimButton.active = !busy && hasTexture;
 		if (applyButton != null) applyButton.active = canChange && !busy && hasChange();
-		if (resetButton != null) resetButton.active = !busy && SkinRepository.ownBytes() != null;
+		if (resetButton != null) resetButton.active = !busy && SkinRepository.canReset();
 	}
 
 	private boolean hasChange() {
@@ -345,18 +347,20 @@ public class SkinScreen extends Screen {
 	private void apply() {
 		byte[] png = candidate != null ? candidate.png() : SkinRepository.ownBytes();
 		if (busy || !canChange || png == null) return;
-		run(SkinChanger.apply(png, slim), "fvcskins.status.applying", shared -> shared
-				? Lang.tr("fvcskins.status.applied")
-				: Lang.tr("fvcskins.status.applied_local"));
+		run(SkinChanger.apply(png, slim), "fvcskins.status.applying", result -> Lang.tr(result.premium()
+				? "fvcskins.status.applied_premium"
+				: result.shared() ? "fvcskins.status.applied" : "fvcskins.status.applied_local"));
 	}
 
 	private void reset() {
 		if (busy || !canChange) return;
-		run(SkinChanger.reset(), "fvcskins.status.resetting", shared -> Lang.tr("fvcskins.status.reset"));
+		run(SkinChanger.reset(), "fvcskins.status.resetting", result -> Lang.tr(result.premium()
+				? "fvcskins.status.reset_premium"
+				: "fvcskins.status.reset"));
 	}
 
 	private void run(java.util.concurrent.CompletableFuture<SkinChanger.Result> task, String pendingKey,
-			java.util.function.Function<Boolean, Component> done) {
+			java.util.function.Function<SkinChanger.Result, Component> done) {
 		busy = true;
 		setStatus(Lang.tr(pendingKey), Theme.TEXT_DIM);
 		task.whenComplete((result, error) -> minecraft.execute(() -> {
@@ -370,7 +374,7 @@ public class SkinScreen extends Screen {
 			clearCandidate();
 			loadRecents();
 			slim = SkinRepository.currentSkin().model() == PlayerModelType.SLIM;
-			Component message = done.apply(result.shared());
+			Component message = done.apply(result);
 			int color = result.shared() ? Theme.SUCCESS : Theme.WARNING;
 			rebuildWidgets();
 			setStatus(message, color);
@@ -411,9 +415,9 @@ public class SkinScreen extends Screen {
 		// Header
 		g.centeredText(font, title, width / 2, 10, Theme.TEXT);
 		String name = minecraft.getUser().getName();
-		Component subtitle = canChange
-				? Lang.tr("fvcskins.subtitle", name)
-				: Lang.tr("fvcskins.subtitle.readonly", name);
+		Component subtitle = !canChange
+				? Lang.tr("fvcskins.subtitle.readonly", name)
+				: SkinRepository.isPremium() ? Lang.tr("fvcskins.subtitle.premium", name) : Lang.tr("fvcskins.subtitle", name);
 		g.centeredText(font, subtitle, width / 2, 22, Theme.TEXT_MUTED);
 
 		// Preview card: gradient stage, floor shadow, caption

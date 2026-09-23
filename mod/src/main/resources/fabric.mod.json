@@ -3,7 +3,7 @@
 	"id": "fvcskins",
 	"version": "${version}",
 	"name": "FvC Skins",
-	"description": "Shows the skin chosen in FvC Launcher, and the skins of other FvC Launcher players, on offline accounts. Change your skin from the title screen or the pause menu.",
+	"description": "Shows the skin chosen in FvC Launcher, and the skins of other FvC Launcher players, on offline accounts. Change your skin from the title screen or the pause menu; on a Microsoft account this changes your real Minecraft skin.",
 	"authors": [
 		"FvC"
 	],

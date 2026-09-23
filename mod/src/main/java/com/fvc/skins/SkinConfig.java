@@ -76,12 +76,7 @@ public record SkinConfig(
 		if (png != null) Files.write(skinPng(), png);
 		else Files.deleteIfExists(skinPng());
 
-		JsonObject json;
-		try (Reader reader = Files.newBufferedReader(jsonFile())) {
-			json = JsonParser.parseReader(reader).getAsJsonObject();
-		} catch (Exception e) {
-			json = new JsonObject();
-		}
+		JsonObject json = readJson();
 		json.addProperty("skin", png != null);
 		json.addProperty("model", slim ? "slim" : "classic");
 		json.addProperty("shared", shared);
@@ -89,6 +84,25 @@ public record SkinConfig(
 		Files.writeString(jsonFile(), GSON.toJson(json));
 
 		return new SkinConfig(configDir, serverUrl, username, offline, png != null ? skinPng() : null, slim);
+	}
+
+	/**
+	 * Records that the Microsoft account's real skin changed in game. The skin itself lives
+	 * on Mojang, so this only tells the launcher to stop showing its cached copy.
+	 */
+	void markPremiumChange() throws IOException {
+		Files.createDirectories(configDir);
+		JsonObject json = readJson();
+		json.addProperty("premiumChangedInGame", Instant.now().toString());
+		Files.writeString(jsonFile(), GSON.toJson(json));
+	}
+
+	private JsonObject readJson() {
+		try (Reader reader = Files.newBufferedReader(jsonFile())) {
+			return JsonParser.parseReader(reader).getAsJsonObject();
+		} catch (Exception e) {
+			return new JsonObject();
+		}
 	}
 
 	private static @Nullable String string(JsonObject json, String key) {
