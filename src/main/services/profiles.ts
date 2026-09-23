@@ -77,6 +77,12 @@ export function applyPackFiles(
   return written
 }
 
+/** The exporter's own skin and account name are rewritten at every launch; never ship them. */
+function isExportable(zipPath: string): boolean {
+  const rel = zipPath.replace(/\\/g, '/')
+  return !/^instance\/config\/fvc-skins(\.json$|\/)/.test(rel)
+}
+
 function ensureInstanceDirs(id: string): void {
   const root = paths.instance(id)
   for (const sub of INSTANCE_SUBDIRS) mkdirSync(join(root, sub), { recursive: true })
@@ -225,7 +231,7 @@ export const profilesService = {
     if (existsSync(dir)) {
       for (const sub of subdirs) {
         const subPath = join(dir, sub)
-        if (existsSync(subPath)) zip.addLocalFolder(subPath, `instance/${sub}`)
+        if (existsSync(subPath)) zip.addLocalFolder(subPath, `instance/${sub}`, isExportable)
       }
       const optionsTxt = join(dir, 'options.txt')
       if (mode === 'everything' && existsSync(optionsTxt)) zip.addLocalFile(optionsTxt, 'instance')

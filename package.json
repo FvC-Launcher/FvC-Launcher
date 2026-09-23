@@ -1,6 +1,6 @@
 {
   "name": "fvc-launcher",
-  "version": "2.3.3-alpha.1",
+  "version": "3.0.0",
   "description": "FvC Launcher — a premium, modern Minecraft launcher with Modrinth integration",
   "main": "./out/main/index.js",
   "author": "FvC",

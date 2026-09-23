@@ -179,6 +179,10 @@ export interface ModrinthSearchHit {
   date_modified: string
   project_type: string
   gallery?: string[]
+  /** The project's chosen banner screenshot, if any. */
+  featured_gallery?: string | null
+  /** Brand color as a 0xRRGGBB integer. */
+  color?: number | null
 }
 
 export interface ModrinthSearchResult {
@@ -437,12 +441,14 @@ export interface NotificationPayload {
   durationMs?: number
 }
 
+/** One entry of Announcement.json in the launcher's GitHub repo. */
 export interface NewsItem {
+  id: number
   title: string
   body: string
+  /** ISO date, e.g. 2026-09-23. */
   date: string
-  tag: string
-  url?: string
+  important: boolean
 }
 
 export interface JavaInstall {

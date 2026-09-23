@@ -3,8 +3,10 @@
 	"package": "com.fvc.skins.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"PauseScreenMixin",
 		"PlayerInfoMixin",
-		"SkinTextureDownloaderAccessor"
+		"SkinTextureDownloaderAccessor",
+		"TitleScreenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

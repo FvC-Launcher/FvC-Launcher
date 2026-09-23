@@ -1,31 +1,65 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
+  ArrowRight,
   Download,
   ExternalLink,
   Eye,
-  HardHat,
+  Info,
+  Layers,
   Link2,
-  RotateCw,
   Search,
   Shirt,
   Trash2,
-  UserCheck
+  User,
+  UserCheck,
+  X
 } from 'lucide-react'
-import { Button, Input, Toggle } from '@/components/ui'
+import { Avatar, Button, Input } from '@/components/ui'
 import { SkinViewer } from '@/components/SkinViewer'
 import { useApp } from '@/store'
 import type { AppliedSkin, ResolvedSkin, SkinModel } from '@shared/types'
 
 /** Remembered across navigations and restarts — the lookup itself is cheap. */
 const STORAGE_KEY = 'fvc.skin.query'
+const RECENT_KEY = 'fvc.skin.recent'
+const RECENT_MAX = 8
 
 function readStoredQuery(): string {
   try {
     return localStorage.getItem(STORAGE_KEY) ?? ''
   } catch {
     return ''
+  }
+}
+
+function readRecent(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((q): q is string => typeof q === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeRecent(list: string[]): void {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list))
+  } catch {
+    // Storage unavailable — recents just won't persist.
+  }
+}
+
+const isUrl = (q: string): boolean => /^https?:\/\//i.test(q.trim())
+
+function shortLink(url: string): string {
+  try {
+    const u = new URL(url)
+    const file = u.pathname.split('/').filter(Boolean).pop()
+    return file ? `${u.hostname}/…/${file}` : u.hostname
+  } catch {
+    return url
   }
 }
 
@@ -36,9 +70,9 @@ export function SkinPage(): ReactNode {
   const pushNotification = useApp((s) => s.pushNotification)
 
   const [query, setQuery] = useState(readStoredQuery)
+  const [recent, setRecent] = useState<string[]>(readRecent)
   const [skin, setSkin] = useState<ResolvedSkin | null>(null)
   const [model, setModel] = useState<SkinModel>('classic')
-  const [view, setView] = useState<'front' | 'back'>('front')
   const [showOverlay, setShowOverlay] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,9 +89,14 @@ export function SkinPage(): ReactNode {
     setApplied(null)
     if (!activeAccount || activeAccount.type !== 'offline') return
     let cancelled = false
-    void window.fvc.skins.getApplied(activeAccount.id).then((s) => !cancelled && setApplied(s))
+    const refresh = (): void => {
+      void window.fvc.skins.getApplied(activeAccount.id).then((s) => !cancelled && setApplied(s))
+    }
+    refresh()
+    const unsubscribe = window.fvc.skins.onChanged(refresh)
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [activeAccount?.id, activeAccount?.type])
 
@@ -121,6 +160,7 @@ export function SkinPage(): ReactNode {
   const load = async (raw: string): Promise<void> => {
     const trimmed = raw.trim()
     if (!trimmed) return
+    setQuery(trimmed)
     setBusy(true)
     setError(null)
     try {
@@ -132,12 +172,26 @@ export function SkinPage(): ReactNode {
       } catch {
         // Private mode / storage disabled — the preview still works.
       }
+      const label = resolved.source === 'username' && resolved.username ? resolved.username : trimmed
+      setRecent((prev) => {
+        const next = [label, ...prev.filter((q) => q.toLowerCase() !== label.toLowerCase())].slice(0, RECENT_MAX)
+        writeRecent(next)
+        return next
+      })
     } catch (err) {
       setSkin(null)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  const forget = (q: string): void => {
+    setRecent((prev) => {
+      const next = prev.filter((r) => r !== q)
+      writeRecent(next)
+      return next
+    })
   }
 
   // Bring back whatever was previewed the last time this page was open.
@@ -148,7 +202,13 @@ export function SkinPage(): ReactNode {
     if (stored) void load(stored)
   }, [])
 
-  const looksLikeUrl = /^https?:\/\//i.test(query.trim())
+  const sourceLabel = !skin
+    ? ''
+    : skin.source === 'applied'
+      ? 'Currently applied'
+      : skin.source === 'url'
+        ? 'From link'
+        : 'From Mojang'
 
   return (
     <>
@@ -156,131 +216,187 @@ export function SkinPage(): ReactNode {
         <div>
           <h1>Skin</h1>
           <div className="subtitle">
-            Pick a skin from a player name or a direct texture link, then apply it to your offline
-            account.
+            Preview any player’s skin or a texture link, then wear it on your offline account.
           </div>
         </div>
       </div>
 
-      <div className="warning-banner" style={{ marginBottom: 16 }}>
-        <AlertTriangle size={16} />
-        <div>
-          This feature is only available for <strong>Offline accounts</strong> — not Microsoft
-          accounts. A Microsoft account always loads its skin from its Mojang profile, so change it
-          on minecraft.net instead. Applied skins show in game on <strong>Fabric 26.2</strong>{' '}
-          profiles, and other FvC Launcher players on the same server see them too.
-          {isMicrosoft && (
-            <>
-              {' '}
-              The active account <strong>{activeAccount?.username}</strong> is a Microsoft account,
-              so nothing set here would apply to it.
-            </>
-          )}
+      {/* ---------------------------------------------------- Target account */}
+      <div className={`skin-target ${isOffline ? '' : 'warn'}`}>
+        {activeAccount ? (
+          <Avatar
+            username={activeAccount.type === 'microsoft' ? activeAccount.username : ''}
+            size={36}
+            radius={9}
+          />
+        ) : (
+          <span className="skin-target-icon">
+            <User size={18} />
+          </span>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="skin-target-title">
+            {isOffline ? (
+              <>
+                Skins apply to <strong>{activeAccount.username}</strong>
+                <span className="badge">Offline</span>
+              </>
+            ) : isMicrosoft ? (
+              <>
+                <strong>{activeAccount.username}</strong> is a Microsoft account
+              </>
+            ) : (
+              'No account selected'
+            )}
+          </div>
+          <div className="tiny">
+            {isOffline
+              ? 'Shows in game on Fabric 26.2 profiles, and to other FvC Launcher players on the same server.'
+              : isMicrosoft
+                ? 'Microsoft accounts always use their Mojang skin — change it on minecraft.net. You can still preview skins here.'
+                : 'Pick an offline account to apply skins to it.'}
+          </div>
         </div>
+        {!isOffline && (
+          <Button icon={ExternalLink} onClick={() => navigate('accounts')}>
+            {hasOffline ? 'Switch account' : 'Add offline account'}
+          </Button>
+        )}
       </div>
 
       <div className="skin-layout">
-        {/* ------------------------------------------------------- Preview */}
-        <div className="card skin-stage">
+        {/* ---------------------------------------------------------- Stage */}
+        <section className="skin-stage">
+          <div className="skin-stage-top">
+            <div className="skin-stage-seg" role="radiogroup" aria-label="Arm width">
+              {(['classic', 'slim'] as const).map((m) => (
+                <button
+                  key={m}
+                  role="radio"
+                  aria-checked={model === m}
+                  className={model === m ? 'active' : ''}
+                  onClick={() => setModel(m)}
+                >
+                  {m === 'classic' ? 'Classic' : 'Slim'}
+                </button>
+              ))}
+            </div>
+            <button
+              className={`pf-glass-btn lg ${showOverlay ? 'on-accent' : ''}`}
+              title={showOverlay ? 'Hide outer layer' : 'Show outer layer'}
+              aria-label="Toggle outer layer"
+              aria-pressed={showOverlay}
+              onClick={() => setShowOverlay((v) => !v)}
+            >
+              <Layers size={16} />
+            </button>
+          </div>
+
           <div className="skin-stage-body">
+            <AnimatePresence mode="wait">
+              {skin ? (
+                <motion.div
+                  key={skin.textureUrl}
+                  className="skin-views"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.22 }}
+                >
+                  {(['front', 'back'] as const).map((view) => (
+                    <figure key={view} className={`skin-view ${view}`}>
+                      <SkinViewer
+                        dataUrl={skin.dataUrl}
+                        model={model}
+                        view={view}
+                        showOverlay={showOverlay}
+                        scale={9}
+                      />
+                      <figcaption>{view === 'front' ? 'Front' : 'Back'}</figcaption>
+                    </figure>
+                  ))}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="empty"
+                  className="skin-placeholder"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {busy ? (
+                    <span className="spinner" style={{ width: 28, height: 28 }} />
+                  ) : (
+                    <>
+                      <Shirt />
+                      <span>No skin loaded yet</span>
+                      <span className="tiny">Search a player or paste a skin link.</span>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {busy && skin && <span className="spinner skin-stage-spinner" />}
+          </div>
+
+          <div className="skin-stage-foot">
             {skin ? (
-              <motion.div
-                key={`${skin.textureUrl}-${view}-${model}-${showOverlay}`}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <SkinViewer
-                  dataUrl={skin.dataUrl}
-                  model={model}
-                  view={view}
-                  showOverlay={showOverlay}
-                />
-              </motion.div>
+              <>
+                <div style={{ minWidth: 0 }}>
+                  <div className="skin-stage-name" title={skin.username ?? skin.textureUrl}>
+                    {skin.username ?? 'Custom skin'}
+                  </div>
+                  <div className="tiny">{sourceLabel}</div>
+                </div>
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <span className="home-chip">{model === 'slim' ? 'Slim · Alex' : 'Classic · Steve'}</span>
+                  {skin.isDefault && <span className="home-chip">Default skin</span>}
+                  {alreadyApplied && (
+                    <span className="home-chip skin-chip-on">
+                      <UserCheck size={12} /> Wearing
+                    </span>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="skin-placeholder">
-                {busy ? (
-                  <span
-                    className="spinner"
-                    style={{ width: 26, height: 26, color: 'var(--accent)' }}
-                  />
-                ) : (
-                  <>
-                    <Shirt />
-                    <span className="tiny">No skin loaded yet</span>
-                  </>
-                )}
-              </div>
+              <div className="tiny">The preview shows both sides at once.</div>
             )}
           </div>
+        </section>
 
-          <div className="skin-stage-footer">
-            <div>
-              {skin ? (
-                <>
-                  <div className="mod-title" style={{ gap: 8 }}>
-                    {skin.username ?? 'Custom skin'}
-                    <span className="badge">
-                      {model === 'slim' ? 'Slim (Alex)' : 'Classic (Steve)'}
-                    </span>
-                    {skin.isDefault && <span className="badge warning">Default skin</span>}
-                  </div>
-                  <div className="tiny" style={{ marginTop: 3 }}>
-                    {view === 'front' ? 'Front view' : 'Back view'} ·{' '}
-                    {skin.source === 'applied'
-                      ? 'currently applied'
-                      : skin.source === 'url'
-                        ? 'from link'
-                        : 'from Mojang'}
-                  </div>
-                </>
-              ) : (
-                <div className="tiny">Search a player or paste a skin link to see it here.</div>
-              )}
-            </div>
-            <Button
-              icon={RotateCw}
-              disabled={!skin}
-              onClick={() => setView((v) => (v === 'front' ? 'back' : 'front'))}
-            >
-              Turn around
-            </Button>
-          </div>
-        </div>
-
-        {/* ------------------------------------------------------ Controls */}
+        {/* ------------------------------------------------------- Controls */}
         <div className="stack" style={{ gap: 14 }}>
           <div className="card skin-panel">
             <div className="skin-panel-title">
-              <Search size={15} /> Skin source
+              <Search size={15} /> Find a skin
             </div>
-            <p className="tiny" style={{ lineHeight: 1.5 }}>
-              Paste a direct link to a 64×64 skin PNG, or type the name of the player whose skin you
-              want.
-            </p>
             <form
-              className="row"
-              style={{ gap: 8, marginTop: 12 }}
+              className="skin-search"
               onSubmit={(e) => {
                 e.preventDefault()
                 void load(query)
               }}
             >
-              <Input
-                value={query}
-                placeholder="https://…/skin.png   or   Notch"
-                spellCheck={false}
-                autoComplete="off"
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <Button variant="primary" type="submit" icon={Eye} loading={busy}>
+              <div className="skin-search-field">
+                {isUrl(query) ? <Link2 size={15} /> : <Search size={15} />}
+                <Input
+                  value={query}
+                  placeholder="Player name or skin PNG link"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ paddingLeft: 36 }}
+                />
+              </div>
+              <Button variant="primary" type="submit" icon={Eye} loading={busy} disabled={!query.trim()}>
                 Preview
               </Button>
             </form>
             <div className="skin-hint tiny">
-              {looksLikeUrl ? (
+              {isUrl(query) ? (
                 <>
-                  <Link2 size={12} /> Reads the texture straight from that link
+                  <Link2 size={12} /> Reads the texture straight from that link — pick the arm width on
+                  the stage
                 </>
               ) : (
                 <>
@@ -293,96 +409,132 @@ export function SkinPage(): ReactNode {
                 <AlertTriangle size={14} /> {error}
               </div>
             )}
+
+            {recent.length > 0 && (
+              <>
+                <div className="skin-subtitle">Recent</div>
+                <div className="skin-recent">
+                  {recent.map((q) => (
+                    <span key={q} className="skin-recent-chip">
+                      <button onClick={() => void load(q)} disabled={busy} title={q}>
+                        {isUrl(q) ? (
+                          <span className="skin-recent-link">
+                            <Link2 size={12} />
+                          </span>
+                        ) : (
+                          <Avatar username={q} size={20} radius={5} />
+                        )}
+                        <span className="skin-recent-label">{isUrl(q) ? shortLink(q) : q}</span>
+                      </button>
+                      <button
+                        className="skin-recent-x"
+                        onClick={() => forget(q)}
+                        title="Remove from recent"
+                        aria-label={`Remove ${q} from recent`}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="card skin-panel">
             <div className="skin-panel-title">
-              <HardHat size={15} /> Model
-            </div>
-            <p className="tiny" style={{ lineHeight: 1.5 }}>
-              A skin loaded from a link carries no model info, so pick the arm width yourself.
-            </p>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <Button
-                variant={model === 'classic' ? 'primary' : 'outline'}
-                onClick={() => setModel('classic')}
-              >
-                Classic
-              </Button>
-              <Button
-                variant={model === 'slim' ? 'primary' : 'outline'}
-                onClick={() => setModel('slim')}
-              >
-                Slim
-              </Button>
-            </div>
-            <div className="row between" style={{ marginTop: 14 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>Outer layer</div>
-                <div className="tiny">Hat, jacket, sleeves and trouser overlays.</div>
-              </div>
-              <Toggle checked={showOverlay} onChange={setShowOverlay} />
-            </div>
-          </div>
-
-          <div className="card skin-panel">
-            <div className="skin-panel-title">
-              <Shirt size={15} /> Apply
+              <Shirt size={15} /> Wear it
             </div>
             {isOffline ? (
               <>
-                <p className="tiny" style={{ lineHeight: 1.5 }}>
+                <div className="skin-compare">
+                  <SkinSwatch label="Now" dataUrl={applied?.dataUrl} model={applied?.model} />
+                  <ArrowRight size={18} className="skin-compare-arrow" />
+                  <SkinSwatch
+                    label="Preview"
+                    dataUrl={skin?.dataUrl}
+                    model={model}
+                    highlight={!!skin && !alreadyApplied}
+                  />
+                </div>
+                <p className="tiny" style={{ lineHeight: 1.5, marginTop: 12 }}>
                   {applied ? (
                     <>
                       <strong>{activeAccount.username}</strong> is wearing a custom skin
-                      {applied.shared ? ', visible to other FvC Launcher players.' : ' that only you can see for now.'}
+                      {applied.shared
+                        ? ', visible to other FvC Launcher players.'
+                        : ' that only you can see for now.'}
                     </>
                   ) : (
                     <>
-                      <strong>{activeAccount.username}</strong> uses the default skin. Apply the
-                      previewed skin to wear it in game.
+                      <strong>{activeAccount.username}</strong> uses the default skin.
                     </>
                   )}
                 </p>
-                <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                  <Button
-                    variant="primary"
-                    icon={Shirt}
-                    loading={applying}
-                    disabled={!skin || alreadyApplied}
-                    onClick={() => void apply()}
-                  >
-                    {alreadyApplied ? 'Applied' : `Apply to ${activeAccount.username}`}
-                  </Button>
-                  {applied && (
-                    <>
-                      <Button icon={UserCheck} onClick={() => showApplied(applied)}>
-                        Show current
-                      </Button>
-                      <Button icon={Trash2} disabled={applying} onClick={() => void removeApplied()}>
-                        Remove
-                      </Button>
-                    </>
-                  )}
-                </div>
+                <Button
+                  variant="primary"
+                  icon={Shirt}
+                  className="skin-apply"
+                  loading={applying}
+                  disabled={!skin || alreadyApplied}
+                  onClick={() => void apply()}
+                >
+                  {alreadyApplied ? 'Already wearing this' : `Apply to ${activeAccount.username}`}
+                </Button>
+                {applied && (
+                  <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                    <Button icon={UserCheck} style={{ flex: 1 }} onClick={() => showApplied(applied)}>
+                      Show current
+                    </Button>
+                    <Button
+                      variant="danger"
+                      icon={Trash2}
+                      disabled={applying}
+                      onClick={() => void removeApplied()}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
               </>
             ) : (
-              <>
-                <p className="tiny" style={{ lineHeight: 1.5 }}>
+              <div className="skin-locked">
+                <Info size={16} />
+                <span className="tiny">
                   {hasOffline
                     ? 'Select an offline account on the Accounts page to apply a skin to it.'
                     : 'There is no offline account yet — add one on the Accounts page.'}
-                </p>
-                <div className="row" style={{ gap: 8, marginTop: 12 }}>
-                  <Button icon={ExternalLink} onClick={() => navigate('accounts')}>
-                    Accounts
-                  </Button>
-                </div>
-              </>
+                </span>
+              </div>
             )}
           </div>
         </div>
       </div>
     </>
+  )
+}
+
+function SkinSwatch({
+  label,
+  dataUrl,
+  model,
+  highlight
+}: {
+  label: string
+  dataUrl?: string
+  model?: SkinModel
+  highlight?: boolean
+}): ReactNode {
+  return (
+    <div className={`skin-swatch ${highlight ? 'highlight' : ''}`}>
+      <div className="skin-swatch-body">
+        {dataUrl && model ? (
+          <SkinViewer dataUrl={dataUrl} model={model} scale={3} />
+        ) : (
+          <User size={26} strokeWidth={1.5} />
+        )}
+      </div>
+      <span>{label}</span>
+    </div>
   )
 }

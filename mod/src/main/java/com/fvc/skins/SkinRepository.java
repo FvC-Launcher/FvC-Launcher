@@ -14,11 +14,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.PlayerModelType;
+import net.minecraft.world.entity.player.PlayerSkin;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -40,10 +42,12 @@ public final class SkinRepository {
 	private static final Map<String, Entry> REMOTE = new ConcurrentHashMap<>();
 	private static final AtomicInteger TEXTURE_IDS = new AtomicInteger();
 
-	private static SkinConfig config = new SkinConfig(null, null, null, false);
+	private static SkinConfig config;
 	private static @Nullable String ownKey;
 	private static @Nullable Skin ownSkin;
+	private static byte @Nullable [] ownBytes;
 	private static boolean ownLoaded;
+	private static @Nullable Supplier<PlayerSkin> vanillaOwn;
 
 	private static final class Entry {
 		volatile @Nullable Skin skin;
@@ -57,6 +61,62 @@ public final class SkinRepository {
 	static void init(SkinConfig loaded) {
 		config = loaded;
 		ownKey = loaded.username() != null ? key(loaded.username()) : null;
+	}
+
+	public static SkinConfig config() {
+		return config;
+	}
+
+	static void updateConfig(SkinConfig updated) {
+		config = updated;
+	}
+
+	/**
+	 * Only offline accounts launched by FvC Launcher can change skins here: Microsoft
+	 * accounts always show their Mojang skin, and the skin server knows names, not sessions.
+	 */
+	public static boolean canChangeSkin() {
+		String name = Minecraft.getInstance().getUser().getName();
+		return config.offline() && config.username() != null && config.username().equalsIgnoreCase(name);
+	}
+
+	/** Your skin as everyone sees it: the FvC one if set, otherwise whatever vanilla resolves. */
+	public static PlayerSkin currentSkin() {
+		Skin own = ownKey != null ? own() : null;
+		if (own != null) return PlayerSkin.insecure(own.texture(), null, null, own.model());
+		if (vanillaOwn == null) {
+			Minecraft mc = Minecraft.getInstance();
+			vanillaOwn = mc.getSkinManager().createLookup(mc.getGameProfile(), false);
+		}
+		return vanillaOwn.get();
+	}
+
+	/** The PNG of your FvC skin, or null when you wear the default one. */
+	public static byte @Nullable [] ownBytes() {
+		if (ownKey != null) own();
+		return ownBytes;
+	}
+
+	public static boolean ownSlim() {
+		return ownSkin != null && ownSkin.model() == PlayerModelType.SLIM;
+	}
+
+	/** Must run on the render thread. */
+	static boolean setOwn(byte @Nullable [] png, boolean slim) {
+		if (ownKey == null) return false;
+		Skin previous = ownSkin;
+		Skin next = png != null ? register(ownKey, png, slim) : null;
+		if (png != null && next == null) return false;
+		ownSkin = next;
+		ownBytes = next != null ? png : null;
+		ownLoaded = true;
+		release(previous);
+		return true;
+	}
+
+	/** Registers a throwaway texture for previews; release it with {@link #release(Skin)}. */
+	public static @Nullable Skin preview(byte[] png, boolean slim) {
+		return register("preview", png, slim);
 	}
 
 	public static @Nullable Skin get(String name) {
@@ -76,6 +136,7 @@ public final class SkinRepository {
 				try {
 					byte[] bytes = Files.readAllBytes(config.skinFile());
 					ownSkin = register(ownKey, bytes, config.slim());
+					if (ownSkin != null) ownBytes = bytes;
 				} catch (Exception e) {
 					FvcSkins.LOGGER.warn("Could not load your skin from {}", config.skinFile(), e);
 				}
@@ -155,7 +216,7 @@ public final class SkinRepository {
 		return new Skin(new ClientAsset.ResourceTexture(id, id), slim ? PlayerModelType.SLIM : PlayerModelType.WIDE);
 	}
 
-	private static void release(@Nullable Skin skin) {
+	public static void release(@Nullable Skin skin) {
 		if (skin != null) Minecraft.getInstance().getTextureManager().release(skin.texture().texturePath());
 	}
 

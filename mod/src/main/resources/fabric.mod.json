@@ -3,8 +3,10 @@
 	"id": "fvcskins",
 	"version": "${version}",
 	"name": "FvC Skins",
-	"description": "Shows the skin chosen in FvC Launcher, and the skins of other FvC Launcher players, on offline accounts.",
-	"authors": ["FvC"],
+	"description": "Shows the skin chosen in FvC Launcher, and the skins of other FvC Launcher players, on offline accounts. Change your skin from the title screen or the pause menu.",
+	"authors": [
+		"FvC"
+	],
 	"contact": {
 		"homepage": "https://github.com/FvC-Launcher/FvC-Launcher",
 		"sources": "https://github.com/FvC-Launcher/FvC-Launcher"
@@ -13,9 +15,13 @@
 	"icon": "assets/fvcskins/icon.png",
 	"environment": "client",
 	"entrypoints": {
-		"client": ["com.fvc.skins.FvcSkins"]
+		"client": [
+			"com.fvc.skins.FvcSkins"
+		]
 	},
-	"mixins": ["fvcskins.mixins.json"],
+	"mixins": [
+		"fvcskins.mixins.json"
+	],
 	"depends": {
 		"fabricloader": ">=0.19.5",
 		"minecraft": "~26.2",

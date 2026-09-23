@@ -269,7 +269,8 @@ export function Modal({
   title,
   children,
   footer,
-  wide
+  wide,
+  className = ''
 }: {
   open: boolean
   onClose: () => void
@@ -277,6 +278,7 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   wide?: boolean
+  className?: string
 }): ReactNode {
   useEffect(() => {
     if (!open) return
@@ -301,7 +303,7 @@ export function Modal({
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
-            className={`modal ${wide ? 'wide' : ''}`}
+            className={`modal ${wide ? 'wide' : ''} ${className}`}
             initial={{ opacity: 0, scale: 0.95, y: 14 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 14 }}

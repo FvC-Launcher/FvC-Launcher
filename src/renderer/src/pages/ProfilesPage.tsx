@@ -27,7 +27,6 @@ import {
   Star,
   Timer,
   Trash2,
-  Upload,
   Wrench,
   X,
   type LucideIcon
@@ -37,39 +36,13 @@ import { InstalledList } from '@/components/InstalledList'
 import { ModBrowser } from '@/components/ModBrowser'
 import { ProfileWizard } from '@/components/ProfileWizard'
 import { formatPlayTime, formatRelative, useApp } from '@/store'
-import { CommunityPacksModal } from '@/components/CommunityPacksModal'
+import { ProfileCover } from '@/components/ProfileCover'
 import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
 import type { ContentKind, Profile, ProfileExportMode } from '@shared/types'
 
 export function ProfilesPage(): ReactNode {
   const openProfileId = useApp((s) => s.openProfileId)
   return openProfileId ? <ProfileDetail profileId={openProfileId} /> : <ProfileGrid />
-}
-
-// ============================================================== Shared
-
-/** Stable hue per profile, so cards without a cover image are still easy to tell apart. */
-function coverHue(id: string): number {
-  let hue = 0
-  for (const ch of id) hue = (hue * 31 + ch.charCodeAt(0)) % 360
-  return hue
-}
-
-/** The profile's background image, or a generated banner tinted from its id. */
-function ProfileCover({ profile }: { profile: Profile }): ReactNode {
-  const Icon = profileIcon(profile.icon)
-  return (
-    <div
-      className={`pf-cover ${profile.backgroundImage ? 'has-image' : ''}`}
-      style={{ ['--hue' as never]: String(coverHue(profile.id)) }}
-    >
-      {profile.backgroundImage ? (
-        <div className="pf-cover-img" style={{ backgroundImage: `url("${profile.backgroundImage}")` }} />
-      ) : (
-        <Icon className="pf-cover-glyph" strokeWidth={1.25} />
-      )}
-    </div>
-  )
 }
 
 // ============================================================== Grid view
@@ -125,10 +98,6 @@ function ProfileGrid(): ReactNode {
   const [renameTarget, setRenameTarget] = useState<Profile | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
-  const [importOpen, setImportOpen] = useState(false)
-  const [browseOpen, setBrowseOpen] = useState(false)
-  const [importRepo, setImportRepo] = useState<string | null>(null) // non-null = online step
-  const [importBusy, setImportBusy] = useState(false)
   const [exportTarget, setExportTarget] = useState<Profile | null>(null)
   // Set when one of the GitHub export buttons was picked; shows the repo step.
   const [githubMode, setGithubMode] = useState<ProfileExportMode | null>(null)
@@ -167,46 +136,6 @@ function ProfileGrid(): ReactNode {
         title: 'Action failed',
         body: err instanceof Error ? err.message : String(err)
       })
-    }
-  }
-
-  const closeImport = (): void => {
-    if (importBusy) return
-    setImportOpen(false)
-    setImportRepo(null)
-  }
-
-  const runManualImport = async (): Promise<void> => {
-    closeImport()
-    await act(async () => {
-      const imported = await window.fvc.profiles.importProfile()
-      if (imported?.packSource) {
-        pushNotification({
-          type: 'info',
-          title: `${imported.name} imported`,
-          body: `Auto-updates from github.com/${imported.packSource.repo}. The latest release is fetched when you press Play.`
-        })
-      }
-    })
-  }
-
-  const runOnlineImport = async (): Promise<void> => {
-    const repo = importRepo?.trim()
-    if (!repo) return
-    setImportBusy(true)
-    try {
-      await window.fvc.profiles.importFromGithub(repo)
-      setImportOpen(false)
-      setImportRepo(null)
-    } catch (err) {
-      // Keep the dialog open so the link can be corrected.
-      pushNotification({
-        type: 'error',
-        title: 'Import failed',
-        body: err instanceof Error ? err.message : String(err)
-      })
-    } finally {
-      setImportBusy(false)
     }
   }
 
@@ -266,12 +195,6 @@ function ProfileGrid(): ReactNode {
           </div>
         </div>
         <div className="row" style={{ gap: 10 }}>
-          <Button icon={Compass} onClick={() => setBrowseOpen(true)}>
-            Browse Modpacks
-          </Button>
-          <Button icon={Upload} onClick={() => { setImportRepo(null); setImportOpen(true) }}>
-            Import
-          </Button>
           <Button variant="primary" icon={Plus} onClick={() => setWizardOpen(true)}>
             New profile
           </Button>
@@ -282,7 +205,7 @@ function ProfileGrid(): ReactNode {
         <EmptyState
           icon={Package}
           title="No profiles yet"
-          hint="Create a profile to choose a Minecraft version, loader and mods."
+          hint="Create a profile, install a modpack, or import one you exported before."
           action={
             <Button variant="primary" icon={Plus} onClick={() => setWizardOpen(true)}>
               Create your first profile
@@ -542,69 +465,6 @@ function ProfileGrid(): ReactNode {
       >
         <div className="modal-body">
           <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
-        </div>
-      </Modal>
-
-      <CommunityPacksModal open={browseOpen} onClose={() => setBrowseOpen(false)} />
-
-      {/* Import dialog */}
-      <Modal
-        open={importOpen}
-        onClose={closeImport}
-        title={importRepo !== null ? 'Import from GitHub' : 'How do you want to import?'}
-        footer={
-          importRepo !== null ? (
-            <>
-              <Button disabled={importBusy} onClick={() => setImportRepo(null)}>
-                Back
-              </Button>
-              <Button
-                variant="primary"
-                icon={Github}
-                loading={importBusy}
-                disabled={!importRepo.trim() || importBusy}
-                onClick={() => void runOnlineImport()}
-              >
-                Import
-              </Button>
-            </>
-          ) : undefined
-        }
-      >
-        <div className="modal-body">
-          {importRepo !== null ? (
-            <>
-              <Field label="GitHub repository link">
-                <Input
-                  autoFocus
-                  placeholder="https://github.com/owner/repo"
-                  value={importRepo}
-                  disabled={importBusy}
-                  onChange={(e) => setImportRepo(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void runOnlineImport()
-                  }}
-                />
-              </Field>
-              <div className="tiny">
-                The latest release of this repository is downloaded and imported as a new profile.
-                Future releases install automatically when you press Play.
-              </div>
-            </>
-          ) : (
-            <div className="export-choices">
-              <button className="export-choice" onClick={() => void runManualImport()}>
-                <span className="export-choice-icon"><HardDrive size={30} /></span>
-                <span className="export-choice-title">Manual Import</span>
-                <span className="export-choice-desc">Import a .fvcpack file from this computer</span>
-              </button>
-              <button className="export-choice" onClick={() => setImportRepo('')}>
-                <span className="export-choice-icon"><Github size={30} /></span>
-                <span className="export-choice-title">Online Import</span>
-                <span className="export-choice-desc">Paste a GitHub repo link to download the pack</span>
-              </button>
-            </div>
-          )}
         </div>
       </Modal>
 

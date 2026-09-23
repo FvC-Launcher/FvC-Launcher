@@ -193,6 +193,8 @@ export interface FvcApi {
     /** Saves the skin for an offline account and uploads it to the skin server. */
     apply(accountId: string, dataUrl: string, model: SkinModel): Promise<AppliedSkin>
     remove(accountId: string): Promise<void>
+    /** Fires when a skin was changed from inside the game. */
+    onChanged(cb: () => void): () => void
   }
   news: {
     launcher(): Promise<NewsItem[]>
@@ -319,6 +321,7 @@ export const CH = {
   skinsGetApplied: 'skins:getApplied',
   skinsApply: 'skins:apply',
   skinsRemove: 'skins:remove',
+  skinsChanged: 'skins:changed',
 
   modpackInstall: 'modpacks:install',
   modpackCommunity: 'modpacks:community',

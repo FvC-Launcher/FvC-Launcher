@@ -4,11 +4,15 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Compass,
   Download,
   Eye,
   ExternalLink,
   FileArchive,
+  Github,
+  HardDrive,
   Image as ImageIcon,
+  MemoryStick,
   Package,
   PackageOpen,
   Search,
@@ -16,9 +20,11 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import { Button, Field, Input, Modal, Progress, Select, Toggle } from '@/components/ui'
+import { Button, Input, Modal, Progress, Select, Toggle } from '@/components/ui'
+import { ProfileCover } from '@/components/ProfileCover'
+import { CommunityPackList } from '@/components/CommunityPackList'
 import { formatCount, formatRelative, useApp } from '@/store'
-import { LOADERS, LOADER_LABELS, PROFILE_ICONS, titleCase } from '@/lib'
+import { LOADERS, LOADER_LABELS, PROFILE_ICONS, profileIcon, titleCase } from '@/lib'
 import type {
   CurseForgePack,
   LoaderId,
@@ -26,11 +32,13 @@ import type {
   McVersion,
   ModpackProgress,
   ModrinthSearchHit,
-  ModrinthVersion
+  ModrinthVersion,
+  Profile
 } from '@shared/types'
 
-type WizardKind = 'empty' | 'modpack'
+type WizardKind = 'empty' | 'modpack' | 'community' | 'import'
 type PackSource = 'modrinth' | 'curseforge'
+type StepId = 'type' | 'version' | 'pack' | 'community' | 'import' | 'details' | 'memory'
 
 type PackSelection =
   | { type: 'modrinth'; hit: ModrinthSearchHit }
@@ -38,8 +46,67 @@ type PackSelection =
   | { type: 'zip'; path: string }
   | null
 
-const EMPTY_STEPS = ['Type', 'Name', 'Minecraft', 'Loader', 'Loader version', 'RAM'] as const
-const MODPACK_STEPS = ['Type', 'Name', 'RAM', 'Modpack'] as const
+const STEP_INFO: Record<StepId, { label: string; hint: string; title: string; description: string }> = {
+  type: {
+    label: 'Start',
+    hint: 'Choose how to begin',
+    title: 'How do you want to start?',
+    description: 'Build your own setup, install a modpack, or bring in one you already have.'
+  },
+  version: {
+    label: 'Game',
+    hint: 'Minecraft & loader',
+    title: 'Pick a version and loader',
+    description: 'The loader decides which mods the profile can run.'
+  },
+  pack: {
+    label: 'Modpack',
+    hint: 'Browse or upload',
+    title: 'Choose a modpack',
+    description: 'The pack decides the Minecraft version and loader for you.'
+  },
+  community: {
+    label: 'Community',
+    hint: 'FvC packs on GitHub',
+    title: 'Community modpacks',
+    description: 'Packs shared by FvC players. They update themselves when the author publishes a release.'
+  },
+  import: {
+    label: 'Import',
+    hint: 'File or GitHub link',
+    title: 'Import a profile',
+    description: 'Bring in a profile exported from FvC Launcher, from this computer or from GitHub.'
+  },
+  details: {
+    label: 'Details',
+    hint: 'Name & look',
+    title: 'Name your profile',
+    description: 'Give it a name, an icon and an optional cover image.'
+  },
+  memory: {
+    label: 'Memory',
+    hint: 'RAM & review',
+    title: 'Memory and review',
+    description: 'Choose how much RAM the game may use, then check everything.'
+  }
+}
+
+const KIND_STEPS: Record<WizardKind, StepId[]> = {
+  empty: ['type', 'version', 'details', 'memory'],
+  modpack: ['type', 'pack', 'details', 'memory'],
+  community: ['type', 'community'],
+  import: ['type', 'import']
+}
+
+const LOADER_INFO: Record<LoaderId, { tagline: string; color: string }> = {
+  vanilla: { tagline: 'Pure Minecraft, no mods', color: '#62b47a' },
+  fabric: { tagline: 'Lightweight, fast updates', color: '#dbb68f' },
+  forge: { tagline: 'The largest mod catalog', color: '#e0864a' },
+  neoforge: { tagline: 'Modern fork of Forge', color: '#f16436' },
+  quilt: { tagline: 'Fabric-compatible fork', color: '#a78bfa' }
+}
+
+const RAM_PRESETS = [2048, 4096, 6144, 8192, 12288]
 
 const PACK_SORTS_MR = [
   { value: 'relevance', label: 'Relevance' },
@@ -77,6 +144,8 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   const [loaderVersion, setLoaderVersion] = useState('')
   const [ramMb, setRamMb] = useState(4096)
   const [creating, setCreating] = useState(false)
+  // Tints the preview banner until the real profile (and its id) exists.
+  const [previewSeed, setPreviewSeed] = useState('new-profile')
 
   // ---- Modpack browser state ----
   const [source, setSource] = useState<PackSource>('modrinth')
@@ -94,8 +163,13 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   const [packVersionId, setPackVersionId] = useState('')
   const [installProgress, setInstallProgress] = useState<ModpackProgress | null>(null)
 
-  const steps: readonly string[] = kind === 'modpack' ? MODPACK_STEPS : EMPTY_STEPS
-  const stepName = steps[step]
+  // ---- Import / community state ----
+  const [importBusy, setImportBusy] = useState<'file' | 'github' | 'community' | null>(null)
+  const [githubLink, setGithubLink] = useState('')
+
+  const steps = KIND_STEPS[kind]
+  const quickKind = kind === 'community' || kind === 'import'
+  const stepId = steps[step]
 
   // Reset on open.
   useEffect(() => {
@@ -120,6 +194,9 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
       setInstallProgress(null)
       setCreating(false)
       setCfError(null)
+      setPreviewSeed(String(Math.random()))
+      setImportBusy(null)
+      setGithubLink('')
       void window.fvc.curseforge.hasApiKey().then(setHasCfKey)
     }
   }, [open])
@@ -154,7 +231,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
 
   // Live modpack search (both sources).
   useEffect(() => {
-    if (!open || stepName !== 'Modpack') return
+    if (!open || stepId !== 'pack') return
     setPackLoading(true)
     setCfError(null)
     const timer = setTimeout(() => {
@@ -186,7 +263,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [open, stepName, source, packQuery, mrSort, cfSort, packMcFilter])
+  }, [open, stepId, source, packQuery, mrSort, cfSort, packMcFilter])
 
   // Versions of the selected Modrinth pack.
   useEffect(() => {
@@ -213,44 +290,53 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
   }, [open])
 
   const maxRam = Math.max(2048, totalRamMb - 2048)
+  const packReady =
+    selection !== null && (selection.type !== 'modrinth' || (packVersionId !== '' && packVersions !== null))
 
-  const canNext = useMemo(() => {
-    switch (stepName) {
-      case 'Name':
+  const stepValid = (id: StepId): boolean => {
+    switch (id) {
+      case 'version':
+        return mcVersion !== '' && (loader === 'vanilla' || loaderVersion !== '')
+      case 'pack':
+        return packReady
+      case 'details':
         return name.trim().length > 0
-      case 'Minecraft':
-        return mcVersion !== ''
-      case 'Loader version':
-        return loaderVersion !== ''
       default:
         return true
     }
-  }, [stepName, name, mcVersion, loaderVersion])
-
+  }
+  const canNext = stepValid(stepId)
   const isLastStep = step === steps.length - 1
-  const canCreate =
-    kind === 'empty' ||
-    (selection !== null &&
-      (selection.type !== 'modrinth' || (packVersionId !== '' && packVersions !== null)))
+  const canCreate = steps.every(stepValid)
+
+  const selectedPackName =
+    selection?.type === 'modrinth'
+      ? selection.hit.title
+      : selection?.type === 'curseforge'
+        ? selection.pack.name
+        : selection?.type === 'zip'
+          ? (selection.path.split(/[\\/]/).pop() ?? 'modpack').replace(/\.zip$/i, '')
+          : ''
 
   const next = (): void => {
-    if (kind === 'empty' && stepName === 'Loader' && loader === 'vanilla') {
-      setStep((s) => s + 2) // vanilla has no loader version
-    } else {
-      setStep((s) => Math.min(s + 1, steps.length - 1))
-    }
+    if (!canNext) return
+    // A modpack usually already has a good name; offer it.
+    if (stepId === 'pack' && !name.trim() && selectedPackName) setName(selectedPackName)
+    setStep((s) => Math.min(s + 1, steps.length - 1))
   }
-  const back = (): void => {
-    if (kind === 'empty' && stepName === 'RAM' && loader === 'vanilla') {
-      setStep((s) => s - 2)
-    } else {
-      setStep((s) => Math.max(s - 1, 0))
-    }
+  const back = (): void => setStep((s) => Math.max(s - 1, 0))
+  const goTo = (index: number): void => {
+    // Only jump back, or forward past steps that are already complete.
+    if (index <= step || steps.slice(0, index).every(stepValid)) setStep(index)
   }
 
   const uploadZip = async (): Promise<void> => {
     const path = await window.fvc.curseforge.pickZip()
     if (path) setSelection({ type: 'zip', path })
+  }
+
+  const pickCover = (): void => {
+    void window.fvc.system.pickImage().then((img) => img && setCover(img))
   }
 
   const create = async (): Promise<void> => {
@@ -310,34 +396,84 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
     }
   }
 
+  /** Imports and community installs create the profile in one go. */
+  const finishImport = (profile: Profile): void => {
+    if (profile.packSource) {
+      pushNotification({
+        type: 'info',
+        title: `${profile.name} added`,
+        body: `Auto-updates from github.com/${profile.packSource.repo}. The latest release is fetched when you press Play.`
+      })
+    } else {
+      pushNotification({ type: 'success', title: `${profile.name} imported` })
+    }
+    onClose()
+    openProfile(profile.id)
+  }
+
+  const importFile = async (): Promise<void> => {
+    setImportBusy('file')
+    try {
+      const profile = await window.fvc.profiles.importProfile()
+      if (profile) finishImport(profile)
+    } catch (err) {
+      pushNotification({ type: 'error', title: 'Import failed', body: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setImportBusy(null)
+    }
+  }
+
+  const importGithub = async (): Promise<void> => {
+    const repo = githubLink.trim()
+    if (!repo || importBusy) return
+    setImportBusy('github')
+    try {
+      finishImport(await window.fvc.profiles.importFromGithub(repo))
+    } catch (err) {
+      // Keep the step open so the link can be corrected.
+      pushNotification({ type: 'error', title: 'Import failed', body: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setImportBusy(null)
+    }
+  }
+
   const installing = creating && kind === 'modpack'
-  const selectedPackName =
-    selection?.type === 'modrinth'
-      ? selection.hit.title
-      : selection?.type === 'curseforge'
-        ? selection.pack.name
-        : selection?.type === 'zip'
-          ? (selection.path.split(/[\\/]/).pop() ?? 'modpack')
-          : name
+  const locked = installing || importBusy !== null
+  const releases = useMemo(() => mcVersions.filter((v) => v.type === 'release').slice(0, 5), [mcVersions])
+  const packVersion = packVersions?.find((v) => v.id === packVersionId)
+
+  // What the preview card and the review list show for "game".
+  const gameLabel =
+    kind === 'modpack'
+      ? selection?.type === 'modrinth' && packVersion
+        ? `${packVersion.game_versions.slice(-1)[0] ?? ''} · ${packVersion.loaders.map(titleCase).join('/')}`
+        : selection
+          ? 'Set by the modpack'
+          : 'Choose a modpack'
+      : `${mcVersion || '…'} · ${LOADER_LABELS[loader]}`
+
+  const info = STEP_INFO[stepId]
 
   return (
     <Modal
       open={open}
-      onClose={() => !installing && onClose()}
-      title="New profile"
-      wide={stepName === 'Modpack'}
+      onClose={() => !locked && onClose()}
+      className="wizard"
       footer={
         installing ? undefined : (
           <>
+            <span className="tiny wz-footer-step">
+              Step {step + 1} of {steps.length}
+            </span>
+            <div style={{ flex: 1 }} />
             {step > 0 && (
-              <Button icon={ArrowLeft} onClick={back}>
+              <Button icon={ArrowLeft} onClick={back} disabled={locked}>
                 Back
               </Button>
             )}
-            <div style={{ flex: 1 }} />
-            {!isLastStep ? (
+            {step > 0 && quickKind ? null : !isLastStep ? (
               <Button variant="primary" disabled={!canNext} onClick={next}>
-                Next <ArrowRight size={15} />
+                Continue <ArrowRight size={15} />
               </Button>
             ) : (
               <Button
@@ -354,271 +490,340 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
         )
       }
     >
-      <div className="modal-body" style={{ minHeight: 320 }}>
-        {installing ? (
-          <InstallProgressView progress={installProgress} packName={selectedPackName} />
-        ) : (
-          <>
-            {/* Step indicator */}
-            <div className="row" style={{ gap: 6 }}>
-              {steps.map((label, i) => (
-                <div key={label} className="row" style={{ gap: 6, flex: i < steps.length - 1 ? 1 : undefined }}>
-                  <span
-                    className="badge"
-                    style={
-                      i === step
-                        ? { background: 'var(--accent)', color: '#06131a' }
-                        : i < step
-                          ? { background: 'rgba(var(--accent-rgb), 0.15)', color: 'var(--accent)' }
-                          : undefined
-                    }
-                  >
-                    {i < step ? <Check size={11} /> : i + 1}
-                  </span>
-                  {i < steps.length - 1 && (
-                    <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                  )}
+      {installing ? (
+        <div className="modal-body">
+          <InstallProgressView progress={installProgress} packName={selectedPackName || name} />
+        </div>
+      ) : (
+        <div className="wz">
+          {/* ------------------------------------------------------ Sidebar */}
+          <aside className="wz-side">
+            {!quickKind && (
+            <div className="wz-preview">
+              <div className="wz-preview-cover">
+                <ProfileCover profile={{ id: previewSeed, icon, backgroundImage: cover || undefined }} />
+                <span className="wz-preview-icon">
+                  <PreviewIcon name={icon} />
+                </span>
+              </div>
+              <div className="wz-preview-body">
+                <div className={`wz-preview-name ${name.trim() ? '' : 'placeholder'}`} title={name}>
+                  {name.trim() || 'New profile'}
                 </div>
-              ))}
+                <div className="wz-preview-meta">{gameLabel}</div>
+                <div className="wz-preview-meta">
+                  <MemoryStick size={11} /> {(ramMb / 1024).toFixed(1)} GB
+                </div>
+              </div>
             </div>
-            <div className="tiny" style={{ textAlign: 'center' }}>
-              Step {step + 1} of {steps.length}: {stepName}
-            </div>
+            )}
 
-            <AnimatePresence mode="wait">
+            <ol className="wz-steps">
+              {steps.map((id, i) => {
+                const done = i < step && stepValid(id)
+                return (
+                  <li key={id}>
+                    <button
+                      className={`wz-step ${i === step ? 'current' : ''} ${done ? 'done' : ''}`}
+                      onClick={() => !locked && goTo(i)}
+                    >
+                      <span className="wz-step-dot">{done ? <Check size={12} strokeWidth={3} /> : i + 1}</span>
+                      <span className="wz-step-text">
+                        <span className="wz-step-label">{STEP_INFO[id].label}</span>
+                        <span className="wz-step-hint">{STEP_INFO[id].hint}</span>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          </aside>
+
+          {/* --------------------------------------------------------- Main */}
+          <section className="wz-main">
+            <header className="wz-head">
+              <div>
+                <h2>{info.title}</h2>
+                <p className="tiny">{info.description}</p>
+              </div>
+              <button className="wz-close" onClick={onClose} disabled={locked} aria-label="Close">
+                <X size={18} />
+              </button>
+            </header>
+
+            <AnimatePresence mode="wait" initial={false}>
               <motion.div
-                key={`${kind}-${step}`}
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.18 }}
-                className="stack"
-                style={{ gap: 16 }}
+                key={`${kind}-${stepId}`}
+                className="wz-content"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.16 }}
               >
-                {stepName === 'Type' && (
-                  <div className="stack" style={{ gap: 10 }}>
-                    <button
-                      className="card hoverable row"
-                      style={{
-                        padding: 18,
-                        gap: 14,
-                        width: '100%',
-                        textAlign: 'left',
-                        outline: kind === 'empty' ? '2px solid var(--accent)' : 'none'
-                      }}
+                {stepId === 'type' && (
+                  <div className="wz-kinds">
+                    <KindCard
+                      active={kind === 'empty'}
+                      icon={Package}
+                      title="Custom profile"
+                      description="Pick a Minecraft version and loader, start clean and add mods yourself."
+                      points={['Any version, including snapshots', 'Vanilla, Fabric, Forge, NeoForge or Quilt']}
                       onClick={() => setKind('empty')}
-                    >
-                      <span className="mod-icon" style={{ width: 48, height: 48, color: 'var(--accent)' }}>
-                        <Package size={22} />
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700 }}>Normal profile</div>
-                        <div className="tiny" style={{ marginTop: 3, lineHeight: 1.4 }}>
-                          Pick a Minecraft version and loader, start clean and add mods yourself.
-                        </div>
-                      </div>
-                      {kind === 'empty' && <Check size={17} style={{ color: 'var(--accent)' }} />}
-                    </button>
-                    <button
-                      className="card hoverable row"
-                      style={{
-                        padding: 18,
-                        gap: 14,
-                        width: '100%',
-                        textAlign: 'left',
-                        outline: kind === 'modpack' ? '2px solid var(--accent)' : 'none'
-                      }}
+                    />
+                    <KindCard
+                      active={kind === 'modpack'}
+                      icon={PackageOpen}
+                      title="Modpack"
+                      description="Install a complete pack from Modrinth or CurseForge, or import a CurseForge .zip."
+                      points={['Mods, configs and loader set up for you', 'Choose the exact pack version']}
                       onClick={() => setKind('modpack')}
-                    >
-                      <span className="mod-icon" style={{ width: 48, height: 48, color: 'var(--accent)' }}>
-                        <PackageOpen size={22} />
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700 }}>Modpack</div>
-                        <div className="tiny" style={{ marginTop: 3, lineHeight: 1.4 }}>
-                          Install a complete pack from Modrinth or CurseForge — or import a CurseForge .zip.
-                          The pack decides the Minecraft version and loader.
-                        </div>
-                      </div>
-                      {kind === 'modpack' && <Check size={17} style={{ color: 'var(--accent)' }} />}
-                    </button>
+                    />
+                    <KindOption
+                      active={kind === 'community'}
+                      icon={Compass}
+                      title="Community packs"
+                      description="Self-updating packs shared by FvC players"
+                      onClick={() => setKind('community')}
+                    />
+                    <KindOption
+                      active={kind === 'import'}
+                      icon={Upload}
+                      title="Import"
+                      description="A .fvcpack file or a GitHub link"
+                      onClick={() => setKind('import')}
+                    />
                   </div>
                 )}
 
-                {stepName === 'Name' && (
-                  <>
-                    <Field label="Profile name">
-                      <Input
-                        autoFocus
-                        placeholder={kind === 'modpack' ? 'My modpack' : 'My awesome profile'}
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && canNext && next()}
-                      />
-                    </Field>
-                    <Field label="Icon">
-                      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-                        {Object.entries(PROFILE_ICONS).map(([iconName, Icon]) => (
+                {stepId === 'community' && (
+                  <CommunityPackList
+                    onInstalled={finishImport}
+                    onBusyChange={(busy) => setImportBusy(busy ? 'community' : null)}
+                  />
+                )}
+
+                {stepId === 'import' && (
+                  <div className="stack" style={{ gap: 14 }}>
+                    <div className="wz-import">
+                      <span className="wz-kind-icon">
+                        <HardDrive size={22} />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="wz-kind-title">From this computer</div>
+                        <div className="wz-kind-desc">Pick a .fvcpack file exported from FvC Launcher.</div>
+                      </div>
+                      <Button
+                        variant="primary"
+                        icon={FileArchive}
+                        loading={importBusy === 'file'}
+                        disabled={importBusy !== null}
+                        onClick={() => void importFile()}
+                      >
+                        Choose file
+                      </Button>
+                    </div>
+
+                    <div className="wz-import column">
+                      <div className="row" style={{ gap: 14 }}>
+                        <span className="wz-kind-icon">
+                          <Github size={22} />
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="wz-kind-title">From GitHub</div>
+                          <div className="wz-kind-desc">
+                            Paste a repository link. Its latest release is imported, and future releases install
+                            automatically when you press Play.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="row" style={{ gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <Input
+                            placeholder="https://github.com/owner/repo"
+                            value={githubLink}
+                            disabled={importBusy !== null}
+                            onChange={(e) => setGithubLink(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && void importGithub()}
+                          />
+                        </div>
+                        <Button
+                          variant="primary"
+                          icon={Download}
+                          loading={importBusy === 'github'}
+                          disabled={!githubLink.trim() || importBusy !== null}
+                          onClick={() => void importGithub()}
+                        >
+                          Import
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {stepId === 'version' && (
+                  <div className="stack" style={{ gap: 22 }}>
+                    <div className="wz-field">
+                      <div className="wz-label">Minecraft version</div>
+                      <div className="wz-chips">
+                        {releases.map((v, i) => (
                           <button
-                            key={iconName}
-                            className="mod-icon"
-                            style={{
-                              width: 42,
-                              height: 42,
-                              cursor: 'pointer',
-                              outline: icon === iconName ? '2px solid var(--accent)' : 'none',
-                              color: icon === iconName ? 'var(--accent)' : undefined
-                            }}
-                            onClick={() => setIcon(iconName)}
+                            key={v.id}
+                            className={`wz-chip ${mcVersion === v.id ? 'active' : ''}`}
+                            onClick={() => setMcVersion(v.id)}
                           >
-                            <Icon size={19} />
+                            {v.id}
+                            {i === 0 && <span className="wz-chip-tag">Latest</span>}
                           </button>
                         ))}
                       </div>
-                    </Field>
-                    <Field label="Cover image (optional)">
-                      {cover ? (
-                        <div
-                          className="card"
-                          style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius)' }}
-                        >
-                          <img
-                            src={cover}
-                            alt=""
-                            style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }}
+                      <div className="wz-version-row">
+                        <div style={{ flex: 1, minWidth: 180 }}>
+                          <Select
+                            value={mcVersion}
+                            options={mcVersions.map((v) => ({
+                              value: v.id,
+                              label: v.id,
+                              hint: v.type !== 'release' ? v.type : undefined
+                            }))}
+                            onChange={setMcVersion}
                           />
-                          <div
-                            className="row"
-                            style={{ position: 'absolute', top: 8, right: 8, gap: 6 }}
+                        </div>
+                        <label className="wz-toggle">
+                          <Toggle checked={showSnapshots} onChange={setShowSnapshots} />
+                          Snapshots
+                        </label>
+                        <label className="wz-toggle">
+                          <Toggle checked={showHistoricalVersions} onChange={setShowHistoricalVersions} />
+                          Before 1.0
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="wz-field">
+                      <div className="wz-label">Mod loader</div>
+                      <div className="wz-loaders">
+                        {LOADERS.map((id) => (
+                          <button
+                            key={id}
+                            className={`wz-loader ${loader === id ? 'active' : ''}`}
+                            style={{ ['--loader' as never]: LOADER_INFO[id].color }}
+                            onClick={() => setLoader(id)}
                           >
-                            <Button
-                              icon={ImageIcon}
-                              onClick={() =>
-                                void window.fvc.system.pickImage().then((img) => img && setCover(img))
-                              }
-                            >
+                            <span className="wz-loader-mark">{LOADER_LABELS[id].charAt(0)}</span>
+                            <span style={{ minWidth: 0 }}>
+                              <span className="wz-loader-name">{LOADER_LABELS[id]}</span>
+                              <span className="wz-loader-tag">{LOADER_INFO[id].tagline}</span>
+                            </span>
+                            {loader === id && <Check size={15} className="wz-loader-check" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {loader !== 'vanilla' && (
+                      <div className="wz-field">
+                        <div className="wz-label">
+                          {LOADER_LABELS[loader]} version for {mcVersion || 'Minecraft'}
+                        </div>
+                        {loaderVersions === null ? (
+                          <div className="row" style={{ gap: 10, padding: '8px 2px' }}>
+                            <span className="spinner" style={{ color: 'var(--accent)' }} />
+                            <span className="tiny">Loading versions…</span>
+                          </div>
+                        ) : loaderVersions.length === 0 ? (
+                          <div className="wz-note warn">
+                            No {LOADER_LABELS[loader]} builds exist for Minecraft {mcVersion}. Pick another
+                            version or loader.
+                          </div>
+                        ) : (
+                          <Select
+                            value={loaderVersion}
+                            options={loaderVersions.slice(0, 60).map((v) => ({
+                              value: v.version,
+                              label: v.version,
+                              hint: v.recommended ? 'recommended' : v.stable ? 'stable' : 'beta'
+                            }))}
+                            onChange={setLoaderVersion}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {stepId === 'details' && (
+                  <div className="stack" style={{ gap: 22 }}>
+                    <div className="wz-field">
+                      <div className="wz-label">Profile name</div>
+                      <Input
+                        autoFocus
+                        className="wz-name"
+                        placeholder={kind === 'modpack' ? 'My modpack' : 'My awesome profile'}
+                        value={name}
+                        maxLength={64}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && next()}
+                      />
+                    </div>
+
+                    <div className="wz-field">
+                      <div className="wz-label">Icon</div>
+                      <div className="wz-icons">
+                        {Object.entries(PROFILE_ICONS).map(([iconName, Icon]) => (
+                          <button
+                            key={iconName}
+                            className={`wz-icon ${icon === iconName ? 'active' : ''}`}
+                            onClick={() => setIcon(iconName)}
+                            aria-label={iconName}
+                            title={iconName}
+                          >
+                            <Icon size={18} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="wz-field">
+                      <div className="wz-label">
+                        Cover image <span className="wz-optional">optional</span>
+                      </div>
+                      {cover ? (
+                        <div className="wz-cover has-image" style={{ backgroundImage: `url("${cover}")` }}>
+                          <div className="row" style={{ gap: 6 }}>
+                            <Button icon={ImageIcon} onClick={pickCover}>
                               Change
                             </Button>
                             <Button variant="danger" icon={X} onClick={() => setCover('')} aria-label="Remove cover" />
                           </div>
                         </div>
                       ) : (
-                        <button
-                          className="card hoverable"
-                          style={{
-                            width: '100%',
-                            padding: '22px 16px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: 8,
-                            border: '1px dashed rgba(255,255,255,0.15)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() =>
-                            void window.fvc.system.pickImage().then((img) => img && setCover(img))
-                          }
-                        >
-                          <ImageIcon size={20} style={{ color: 'var(--text-3)' }} />
-                          <span className="tiny">
-                            Choose an image — shown on the profile card and Play page
-                          </span>
+                        <button className="wz-cover" onClick={pickCover}>
+                          <ImageIcon size={20} />
+                          <span>Choose an image</span>
+                          <span className="tiny">Shown on the profile card and the Play page</span>
                         </button>
                       )}
-                    </Field>
-                  </>
-                )}
-
-                {stepName === 'Minecraft' && (
-                  <>
-                    <Field label="Minecraft version">
-                      <Select
-                        value={mcVersion}
-                        options={mcVersions.map((v) => ({
-                          value: v.id,
-                          label: v.id,
-                          hint: v.type !== 'release' ? v.type : undefined
-                        }))}
-                        onChange={setMcVersion}
-                      />
-                    </Field>
-                    <label className="row" style={{ gap: 10, cursor: 'pointer' }}>
-                      <Toggle checked={showSnapshots} onChange={setShowSnapshots} />
-                      <span style={{ fontSize: '0.86rem' }}>Show snapshots</span>
-                    </label>
-                    <label className="row" style={{ gap: 10, cursor: 'pointer' }}>
-                      <Toggle checked={showHistoricalVersions} onChange={setShowHistoricalVersions} />
-                      <span style={{ fontSize: '0.86rem' }}>Show historical versions (before 1.0)</span>
-                    </label>
-                  </>
-                )}
-
-                {stepName === 'Loader' && (
-                  <div className="stack" style={{ gap: 8 }}>
-                    {LOADERS.map((id) => (
-                      <button
-                        key={id}
-                        className="card hoverable row"
-                        style={{
-                          padding: 14,
-                          gap: 12,
-                          width: '100%',
-                          textAlign: 'left',
-                          outline: loader === id ? '2px solid var(--accent)' : 'none'
-                        }}
-                        onClick={() => setLoader(id)}
-                      >
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{LOADER_LABELS[id]}</div>
-                          <div className="tiny" style={{ marginTop: 2 }}>
-                            {
-                              {
-                                vanilla: 'Pure Minecraft, no mod support',
-                                fabric: 'Lightweight, fast updates, great performance mods',
-                                forge: 'The classic loader with the largest mod catalog',
-                                neoforge: 'Modern fork of Forge for recent Minecraft versions',
-                                quilt: 'Fabric-compatible community fork'
-                              }[id]
-                            }
-                          </div>
-                        </div>
-                        {loader === id && <Check size={17} style={{ color: 'var(--accent)' }} />}
-                      </button>
-                    ))}
+                    </div>
                   </div>
                 )}
 
-                {stepName === 'Loader version' && (
-                  <Field label={`${LOADER_LABELS[loader]} version for Minecraft ${mcVersion}`}>
-                    {loaderVersions === null ? (
-                      <div className="row" style={{ gap: 10, padding: 10 }}>
-                        <span className="spinner" style={{ color: 'var(--accent)' }} />
-                        <span className="muted" style={{ fontSize: '0.86rem' }}>
-                          Loading versions…
-                        </span>
+                {stepId === 'memory' && (
+                  <div className="stack" style={{ gap: 22 }}>
+                    <div className="wz-field">
+                      <div className="wz-label">Allocated RAM</div>
+                      <div className="wz-chips">
+                        {RAM_PRESETS.filter((mb) => mb <= maxRam).map((mb) => (
+                          <button
+                            key={mb}
+                            className={`wz-chip ${ramMb === mb ? 'active' : ''}`}
+                            onClick={() => setRamMb(mb)}
+                          >
+                            {mb / 1024} GB
+                            {mb === (kind === 'modpack' ? 6144 : 4096) && <span className="wz-chip-tag">Suggested</span>}
+                          </button>
+                        ))}
                       </div>
-                    ) : loaderVersions.length === 0 ? (
-                      <div className="badge warning" style={{ alignSelf: 'flex-start' }}>
-                        No {LOADER_LABELS[loader]} builds found for {mcVersion}
-                      </div>
-                    ) : (
-                      <Select
-                        value={loaderVersion}
-                        options={loaderVersions.slice(0, 60).map((v) => ({
-                          value: v.version,
-                          label: v.version,
-                          hint: v.recommended ? 'recommended' : v.stable ? 'stable' : 'beta'
-                        }))}
-                        onChange={setLoaderVersion}
-                      />
-                    )}
-                  </Field>
-                )}
-
-                {stepName === 'RAM' && (
-                  <>
-                    <Field label="Allocated RAM">
-                      <div className="row" style={{ gap: 14 }}>
+                      <div className="wz-ram">
                         <input
                           type="range"
                           className="slider"
@@ -629,49 +834,57 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                           onChange={(e) => setRamMb(Number(e.target.value))}
                           style={{ ['--slider-fill' as never]: `${((ramMb - 1024) / (maxRam - 1024)) * 100}%` }}
                         />
-                        <span style={{ minWidth: 70, textAlign: 'right', fontWeight: 700 }}>
-                          {(ramMb / 1024).toFixed(1)} GB
-                        </span>
+                        <span className="wz-ram-value">{(ramMb / 1024).toFixed(1)} GB</span>
                       </div>
-                      <p className="tiny" style={{ marginTop: 6 }}>
-                        4–6 GB is plenty for most modpacks. Leaving RAM for your system avoids stutters.
+                      <p className="tiny">
+                        {(ramMb / 1024).toFixed(1)} of {(totalRamMb / 1024).toFixed(0)} GB on this computer.{' '}
+                        {kind === 'modpack'
+                          ? '6–8 GB suits most modpacks; big ones may want more.'
+                          : '4 GB is plenty for vanilla and light mod setups.'}
                       </p>
-                    </Field>
+                    </div>
 
-                    {kind === 'empty' && (
-                      <div className="card" style={{ padding: 20 }}>
-                        <h3 style={{ marginBottom: 12 }}>Summary</h3>
-                        {[
-                          ['Name', name],
-                          ['Minecraft', mcVersion],
-                          ['Loader', LOADER_LABELS[loader] + (loader !== 'vanilla' ? ` ${loaderVersion}` : '')],
-                          ['RAM', `${(ramMb / 1024).toFixed(1)} GB`]
-                        ].map(([k, v]) => (
-                          <div key={k} className="row between" style={{ padding: '7px 0', fontSize: '0.88rem' }}>
-                            <span className="muted">{k}</span>
-                            <span style={{ fontWeight: 600 }}>{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                    <div className="wz-review">
+                      <ReviewRow label="Name" value={name.trim() || '—'} onEdit={() => goTo(steps.indexOf('details'))} />
+                      {kind === 'modpack' ? (
+                        <>
+                          <ReviewRow
+                            label="Modpack"
+                            value={selectedPackName || '—'}
+                            onEdit={() => goTo(steps.indexOf('pack'))}
+                          />
+                          {packVersion && (
+                            <ReviewRow label="Pack version" value={packVersion.name || packVersion.version_number} />
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <ReviewRow label="Minecraft" value={mcVersion} onEdit={() => goTo(steps.indexOf('version'))} />
+                          <ReviewRow
+                            label="Loader"
+                            value={LOADER_LABELS[loader] + (loader !== 'vanilla' ? ` ${loaderVersion}` : '')}
+                            onEdit={() => goTo(steps.indexOf('version'))}
+                          />
+                        </>
+                      )}
+                      <ReviewRow label="Memory" value={`${(ramMb / 1024).toFixed(1)} GB`} />
+                    </div>
+                  </div>
                 )}
 
-                {stepName === 'Modpack' && (
+                {stepId === 'pack' && (
                   <div className="stack" style={{ gap: 12 }}>
-                    {/* Source switch */}
                     <div className="row between" style={{ flexWrap: 'wrap', gap: 10 }}>
-                      <div className="tabs">
+                      <div className="segmented">
                         {(['modrinth', 'curseforge'] as const).map((s) => (
                           <button
                             key={s}
-                            className={`tab ${source === s ? 'active' : ''}`}
+                            className={source === s ? 'active' : ''}
                             onClick={() => {
                               setSource(s)
                               if (selection && selection.type !== 'zip') setSelection(null)
                             }}
                           >
-                            {source === s && <span className="tab-bg" />}
                             {s === 'modrinth' ? 'Modrinth' : 'CurseForge'}
                           </button>
                         ))}
@@ -681,7 +894,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                           <Select
                             value={packMcFilter}
                             options={[
-                              { value: '', label: 'Any MC version' },
+                              { value: '', label: 'Any version' },
                               ...mcVersions.slice(0, 60).map((v) => ({ value: v.id, label: v.id }))
                             ]}
                             onChange={setPackMcFilter}
@@ -697,150 +910,130 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                       </div>
                     </div>
 
-                    <div style={{ position: 'relative' }}>
-                      <Search
-                        size={15}
-                        style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }}
-                      />
+                    <div className="pf-search" style={{ maxWidth: 'none' }}>
+                      <Search size={16} />
                       <Input
                         placeholder={`Search modpacks on ${source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…`}
                         value={packQuery}
                         onChange={(e) => setPackQuery(e.target.value)}
-                        style={{ paddingLeft: 36 }}
+                        style={{ paddingLeft: 38 }}
                       />
                     </div>
 
-                    {/* Results */}
-                    <div className="stack" style={{ gap: 8, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                    <div className="wz-packs">
                       {packLoading ? (
                         <div className="empty-state" style={{ padding: 26 }}>
                           <span className="spinner" style={{ width: 24, height: 24, color: 'var(--accent)' }} />
                         </div>
                       ) : source === 'curseforge' && cfError ? (
-                        <div className="card" style={{ padding: 16 }}>
-                          <div className="row" style={{ gap: 10 }}>
-                            <span className="badge warning">CurseForge</span>
-                            <span style={{ fontSize: '0.86rem', lineHeight: 1.5 }}>{cfError}</span>
-                          </div>
-                          {!hasCfKey && (
-                            <p className="tiny" style={{ marginTop: 8, lineHeight: 1.5 }}>
-                              You can still import a CurseForge modpack .zip with the button below — no key needed.
-                            </p>
-                          )}
+                        <div className="wz-note warn">
+                          {cfError}
+                          {!hasCfKey && ' You can still import a CurseForge .zip below; no key needed.'}
                         </div>
-                      ) : source === 'modrinth' ? (
-                        mrHits.length === 0 ? (
-                          <div className="empty-state" style={{ padding: 26 }}>
-                            <Package />
-                            <span style={{ fontSize: '0.86rem' }}>No modpacks found.</span>
-                          </div>
-                        ) : (
-                          mrHits.map((hit) => {
-                            const isSelected =
-                              selection?.type === 'modrinth' && selection.hit.project_id === hit.project_id
-                            return (
-                              <PackRow
-                                key={hit.project_id}
-                                icon={hit.icon_url}
-                                title={hit.title}
-                                author={hit.author}
-                                description={hit.description}
-                                downloads={hit.downloads}
-                                updated={hit.date_modified}
-                                badges={(hit.display_categories ?? hit.categories)?.slice(0, 2) ?? []}
-                                selected={!!isSelected}
-                                onSelect={() => setSelection({ type: 'modrinth', hit })}
-                                extra={
-                                  <Button
-                                    variant="subtle"
-                                    icon={Eye}
-                                    onClick={() => openProject(hit.project_id, true)}
-                                    aria-label="Details"
-                                  />
-                                }
-                              />
-                            )
-                          })
-                        )
-                      ) : cfHits.length === 0 ? (
+                      ) : (source === 'modrinth' ? mrHits.length : cfHits.length) === 0 ? (
                         <div className="empty-state" style={{ padding: 26 }}>
                           <Package />
                           <span style={{ fontSize: '0.86rem' }}>No modpacks found.</span>
                         </div>
+                      ) : source === 'modrinth' ? (
+                        mrHits.map((hit) => (
+                          <PackRow
+                            key={hit.project_id}
+                            icon={hit.icon_url}
+                            title={hit.title}
+                            author={hit.author}
+                            description={hit.description}
+                            downloads={hit.downloads}
+                            updated={hit.date_modified}
+                            badges={(hit.display_categories ?? hit.categories)?.slice(0, 2) ?? []}
+                            selected={selection?.type === 'modrinth' && selection.hit.project_id === hit.project_id}
+                            onSelect={() => setSelection({ type: 'modrinth', hit })}
+                            extra={
+                              <Button
+                                variant="subtle"
+                                icon={Eye}
+                                onClick={() => openProject(hit.project_id, true)}
+                                aria-label="Details"
+                                title="Details"
+                              />
+                            }
+                          />
+                        ))
                       ) : (
-                        cfHits.map((pack) => {
-                          const isSelected = selection?.type === 'curseforge' && selection.pack.id === pack.id
-                          return (
-                            <PackRow
-                              key={pack.id}
-                              icon={pack.logoUrl}
-                              title={pack.name}
-                              author={pack.author}
-                              description={pack.summary}
-                              downloads={pack.downloads}
-                              updated={pack.dateModified}
-                              badges={pack.categories.slice(0, 2)}
-                              selected={!!isSelected}
-                              onSelect={() => setSelection({ type: 'curseforge', pack })}
-                              extra={
-                                pack.websiteUrl ? (
-                                  <Button
-                                    variant="subtle"
-                                    icon={ExternalLink}
-                                    onClick={() => window.fvc.system.openExternal(pack.websiteUrl!)}
-                                    aria-label="Open on CurseForge"
-                                  />
-                                ) : undefined
-                              }
-                            />
-                          )
-                        })
+                        cfHits.map((pack) => (
+                          <PackRow
+                            key={pack.id}
+                            icon={pack.logoUrl}
+                            title={pack.name}
+                            author={pack.author}
+                            description={pack.summary}
+                            downloads={pack.downloads}
+                            updated={pack.dateModified}
+                            badges={pack.categories.slice(0, 2)}
+                            selected={selection?.type === 'curseforge' && selection.pack.id === pack.id}
+                            onSelect={() => setSelection({ type: 'curseforge', pack })}
+                            extra={
+                              pack.websiteUrl ? (
+                                <Button
+                                  variant="subtle"
+                                  icon={ExternalLink}
+                                  onClick={() => window.fvc.system.openExternal(pack.websiteUrl!)}
+                                  aria-label="Open on CurseForge"
+                                  title="Open on CurseForge"
+                                />
+                              ) : undefined
+                            }
+                          />
+                        ))
                       )}
                     </div>
 
-                    {/* Modrinth version picker */}
-                    {selection?.type === 'modrinth' && (
-                      <Field label={`${selection.hit.title} — version to install`}>
-                        {packVersions === null ? (
-                          <div className="row" style={{ gap: 10 }}>
-                            <span className="spinner" style={{ color: 'var(--accent)' }} />
-                            <span className="tiny">Loading versions…</span>
-                          </div>
-                        ) : (
-                          <Select
-                            value={packVersionId}
-                            options={packVersions.slice(0, 40).map((v) => ({
-                              value: v.id,
-                              label: v.name || v.version_number,
-                              hint: `${v.game_versions.slice(-1)[0] ?? ''} · ${v.loaders.join('/')}`
-                            }))}
-                            onChange={setPackVersionId}
-                          />
-                        )}
-                      </Field>
-                    )}
-
-                    {/* Center: upload a CurseForge zip */}
-                    <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-                      <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                      <span className="tiny">or</span>
-                      <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      {selection?.type === 'zip' ? (
-                        <div
-                          className="card row"
-                          style={{ padding: '10px 16px', gap: 10, outline: '2px solid var(--accent)' }}
-                        >
-                          <FileArchive size={17} style={{ color: 'var(--accent)' }} />
-                          <span style={{ fontSize: '0.88rem', fontWeight: 600, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {selection.path.split(/[\\/]/).pop()}
+                    {/* Selection bar: pack version, or the uploaded zip, or the upload button */}
+                    <div className="wz-pack-bar">
+                      {selection?.type === 'modrinth' ? (
+                        <>
+                          <span className="wz-pack-bar-label">
+                            <Check size={14} /> {selection.hit.title}
                           </span>
-                          <Button variant="subtle" icon={X} onClick={() => setSelection(null)} aria-label="Remove file" />
-                        </div>
+                          <div style={{ flex: 1, minWidth: 200 }}>
+                            {packVersions === null ? (
+                              <div className="row" style={{ gap: 8 }}>
+                                <span className="spinner" style={{ color: 'var(--accent)' }} />
+                                <span className="tiny">Loading versions…</span>
+                              </div>
+                            ) : (
+                              <Select
+                                value={packVersionId}
+                                options={packVersions.slice(0, 40).map((v) => ({
+                                  value: v.id,
+                                  label: v.name || v.version_number,
+                                  hint: `${v.game_versions.slice(-1)[0] ?? ''} · ${v.loaders.join('/')}`
+                                }))}
+                                onChange={setPackVersionId}
+                              />
+                            )}
+                          </div>
+                        </>
+                      ) : selection?.type === 'zip' ? (
+                        <>
+                          <span className="wz-pack-bar-label">
+                            <FileArchive size={14} /> {selection.path.split(/[\\/]/).pop()}
+                          </span>
+                          <div style={{ flex: 1 }} />
+                          <Button variant="subtle" icon={X} onClick={() => setSelection(null)}>
+                            Remove
+                          </Button>
+                        </>
+                      ) : selection?.type === 'curseforge' ? (
+                        <span className="wz-pack-bar-label">
+                          <Check size={14} /> {selection.pack.name} · latest version
+                        </span>
                       ) : (
-                        <Button icon={Upload} onClick={() => void uploadZip()}>
-                          Upload CurseForge modpack (.zip)
+                        <span className="tiny">Select a pack above, or</span>
+                      )}
+                      {selection?.type !== 'zip' && (
+                        <Button icon={Upload} onClick={() => void uploadZip()} style={{ marginLeft: 'auto' }}>
+                          Upload .zip
                         </Button>
                       )}
                     </div>
@@ -848,14 +1041,98 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
                 )}
               </motion.div>
             </AnimatePresence>
-          </>
-        )}
-      </div>
+          </section>
+        </div>
+      )}
     </Modal>
   )
 }
 
-// ------------------------------------------------------------ pack result row
+// ------------------------------------------------------------ small parts
+
+function PreviewIcon({ name }: { name: string }): ReactNode {
+  const Icon = profileIcon(name)
+  return <Icon size={22} />
+}
+
+function KindCard({
+  active,
+  icon: Icon,
+  title,
+  description,
+  points,
+  onClick
+}: {
+  active: boolean
+  icon: typeof Package
+  title: string
+  description: string
+  points: string[]
+  onClick: () => void
+}): ReactNode {
+  return (
+    <button className={`wz-kind ${active ? 'active' : ''}`} onClick={onClick}>
+      <span className="wz-kind-icon">
+        <Icon size={24} />
+      </span>
+      <span className="wz-kind-title">{title}</span>
+      <span className="wz-kind-desc">{description}</span>
+      <span className="wz-kind-points">
+        {points.map((p) => (
+          <span key={p}>
+            <Check size={12} /> {p}
+          </span>
+        ))}
+      </span>
+      <span className="wz-kind-radio">{active && <Check size={12} strokeWidth={3} />}</span>
+    </button>
+  )
+}
+
+function KindOption({
+  active,
+  icon: Icon,
+  title,
+  description,
+  onClick
+}: {
+  active: boolean
+  icon: typeof Package
+  title: string
+  description: string
+  onClick: () => void
+}): ReactNode {
+  return (
+    <button className={`wz-kind compact ${active ? 'active' : ''}`} onClick={onClick}>
+      <span className="wz-kind-icon">
+        <Icon size={20} />
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span className="wz-kind-title">{title}</span>
+        <span className="wz-kind-desc">{description}</span>
+      </span>
+      <span className="wz-kind-radio">{active && <Check size={12} strokeWidth={3} />}</span>
+    </button>
+  )
+}
+
+function ReviewRow({ label, value, onEdit }: { label: string; value: string; onEdit?: () => void }): ReactNode {
+  return (
+    <div className="wz-review-row">
+      <span className="wz-review-label">{label}</span>
+      <span className="wz-review-value" title={value}>
+        {value}
+      </span>
+      {onEdit ? (
+        <button className="wz-review-edit" onClick={onEdit}>
+          Edit
+        </button>
+      ) : (
+        <span className="wz-review-edit" />
+      )}
+    </div>
+  )
+}
 
 function PackRow(props: {
   icon: string | null
@@ -870,16 +1147,7 @@ function PackRow(props: {
   extra?: ReactNode
 }): ReactNode {
   return (
-    <div
-      className="card hoverable mod-row"
-      style={{
-        alignItems: 'center',
-        cursor: 'pointer',
-        padding: 11,
-        outline: props.selected ? '2px solid var(--accent)' : 'none'
-      }}
-      onClick={props.onSelect}
-    >
+    <div className={`wz-pack mod-row ${props.selected ? "selected" : ""}`} onClick={props.onSelect}>
       {props.icon ? (
         <img className="mod-icon" src={props.icon} alt="" loading="lazy" style={{ width: 44, height: 44 }} />
       ) : (
@@ -907,8 +1175,8 @@ function PackRow(props: {
       </div>
       <div className="row" style={{ gap: 6 }} onClick={(e) => e.stopPropagation()}>
         {props.extra}
-        {props.selected && <Check size={17} style={{ color: 'var(--accent)' }} />}
       </div>
+      <span className="wz-pack-radio">{props.selected && <Check size={12} strokeWidth={3} />}</span>
     </div>
   )
 }
@@ -935,35 +1203,40 @@ function InstallProgressView({
 }): ReactNode {
   const currentIndex = progress ? PHASE_ORDER.indexOf(progress.phase) : 0
   return (
-    <div className="stack" style={{ gap: 18, padding: '20px 4px', alignItems: 'center' }}>
-      <h2 style={{ textAlign: 'center' }}>Installing {packName}…</h2>
-      <div className="stack" style={{ gap: 10, width: '100%', maxWidth: 420 }}>
+    <div className="wz-install">
+      <span className="wz-install-icon">
+        <Download size={26} />
+      </span>
+      <h2>Installing {packName}</h2>
+      <p className="tiny">Large packs can take a few minutes. Progress also appears on the Downloads page.</p>
+      <ol className="wz-install-steps">
         {PHASE_ORDER.map((phase, i) => {
           const isCurrent = i === currentIndex
           const isDone = i < currentIndex
           return (
-            <div key={phase} className="row" style={{ gap: 10, opacity: isDone || isCurrent ? 1 : 0.35 }}>
-              {isDone ? (
-                <Check size={15} style={{ color: 'var(--success)' }} />
-              ) : isCurrent ? (
-                <span className="spinner" style={{ width: 14, height: 14, color: 'var(--accent)' }} />
-              ) : (
-                <span style={{ width: 15 }} />
-              )}
-              <span style={{ fontSize: '0.88rem', fontWeight: isCurrent ? 600 : 400 }}>
-                {PHASE_LABELS[phase]}
-                {isCurrent && progress?.phase === 'files' ? ` — ${progress.detail.replace(/^Downloading files /, '')}` : ''}
+            <li key={phase} className={isDone ? 'done' : isCurrent ? 'current' : ''}>
+              <span className="wz-step-dot">
+                {isDone ? (
+                  <Check size={12} strokeWidth={3} />
+                ) : isCurrent ? (
+                  <span className="spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  i + 1
+                )}
               </span>
-            </div>
+              <span>
+                {PHASE_LABELS[phase]}
+                {isCurrent && progress?.phase === 'files' ? (
+                  <span className="tiny"> · {progress.detail.replace(/^Downloading files /, '')}</span>
+                ) : null}
+              </span>
+            </li>
           )
         })}
-      </div>
+      </ol>
       <div style={{ width: '100%', maxWidth: 420 }}>
         <Progress value={progress?.phase === 'files' ? progress.progress : -1} />
       </div>
-      <p className="tiny" style={{ textAlign: 'center' }}>
-        Large packs can take a few minutes. Progress also appears on the Downloads page.
-      </p>
     </div>
   )
 }

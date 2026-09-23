@@ -207,6 +207,7 @@ export const launchService = {
       ]
 
       const client = new Client()
+      const launchedProfile = profile
 
       client.on('debug', (line: string) => settings.debugLogging && log(`[debug] ${line}`))
       client.on('data', (line: string) => {
@@ -234,6 +235,14 @@ export const launchService = {
         if (gameStartedAt > 0) {
           profilesService.addPlaySession(profileId, (Date.now() - gameStartedAt) / 1000)
           gameStartedAt = 0
+        }
+        try {
+          if (skinsService.syncFromInstance(launchedProfile, accountId)) {
+            broadcast(CH.skinsChanged)
+            notify({ type: 'success', title: 'Skin saved', body: 'The skin you picked in game is now saved to your account.' })
+          }
+        } catch (err) {
+          log(`[FvC] Could not sync the in-game skin: ${err instanceof Error ? err.message : String(err)}`)
         }
         const win = BrowserWindow.getAllWindows()[0]
         if (win && !win.isDestroyed() && win.isMinimized()) win.restore()

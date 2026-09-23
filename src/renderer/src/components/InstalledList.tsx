@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowUpCircle, Package, RefreshCw, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ArrowUpCircle, Package, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { Button, ConfirmDialog, EmptyState, Toggle } from '@/components/ui'
 import { formatBytes, useApp } from '@/store'
 import { KIND_LABELS } from '@/lib'
 import type { ContentKind, InstalledContent } from '@shared/types'
+
+type Filter = 'all' | 'enabled' | 'disabled' | 'updates'
 
 export function InstalledList({
   profileId,
@@ -24,6 +26,8 @@ export function InstalledList({
   const [removeTarget, setRemoveTarget] = useState<InstalledContent | null>(null)
   const [dependents, setDependents] = useState<string[]>([])
   const [keepConfig, setKeepConfig] = useState(true)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
 
   const reload = useCallback(async () => {
     setItems(await window.fvc.content.list(profileId, kind))
@@ -31,6 +35,8 @@ export function InstalledList({
 
   useEffect(() => {
     setItems(null)
+    setQuery('')
+    setFilter('all')
     void reload()
   }, [reload, reloadKey])
 
@@ -45,6 +51,7 @@ export function InstalledList({
           ? { type: 'info', title: `${count} update${count > 1 ? 's' : ''} available` }
           : { type: 'success', title: 'Everything is up to date' }
       )
+      if (count > 0) setFilter('updates')
     } catch (err) {
       pushNotification({
         type: 'error',
@@ -119,87 +126,158 @@ export function InstalledList({
 
   if (items === null) {
     return (
-      <div className="empty-state">
-        <span className="spinner" style={{ width: 28, height: 28, color: 'var(--accent)' }} />
+      <div className="il-list">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="mb-skeleton list" style={{ height: 68 }} />
+        ))}
       </div>
     )
   }
 
-  const updatesAvailable = items.filter((i) => i.updateVersionId).length
+  const plural = KIND_LABELS[kind].plural.toLowerCase()
+  const counts = {
+    all: items.length,
+    enabled: items.filter((i) => i.enabled).length,
+    disabled: items.filter((i) => !i.enabled).length,
+    updates: items.filter((i) => i.updateVersionId).length
+  }
+  const needle = query.trim().toLowerCase()
+  const shown = items.filter((i) => {
+    if (filter === 'enabled' && !i.enabled) return false
+    if (filter === 'disabled' && i.enabled) return false
+    if (filter === 'updates' && !i.updateVersionId) return false
+    return (
+      !needle ||
+      (i.name ?? '').toLowerCase().includes(needle) ||
+      i.fileName.toLowerCase().includes(needle) ||
+      (i.author ?? '').toLowerCase().includes(needle)
+    )
+  })
+  const totalSize = items.reduce((sum, i) => sum + i.fileSize, 0)
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div className="row between">
-        <span className="muted" style={{ fontSize: '0.85rem' }}>
-          {items.length} {items.length === 1 ? KIND_LABELS[kind].singular.toLowerCase() : KIND_LABELS[kind].plural.toLowerCase()} installed
-        </span>
-        <div className="row" style={{ gap: 8 }}>
-          {updatesAvailable > 0 && (
-            <Button variant="primary" icon={ArrowUpCircle} onClick={() => void updateAll()}>
-              Update all ({updatesAvailable})
-            </Button>
-          )}
-          <Button icon={RefreshCw} loading={checking} onClick={() => void checkUpdates()}>
-            Check updates
-          </Button>
-        </div>
-      </div>
-
       {items.length === 0 ? (
         <EmptyState
           icon={Package}
-          title={`No ${KIND_LABELS[kind].plural.toLowerCase()} yet`}
-          hint="Use the Browse tab to install content from Modrinth."
+          title={`No ${plural} yet`}
+          hint={`Switch to Browse Modrinth to install ${plural} into this profile.`}
         />
       ) : (
-        items.map((item) => (
-          <motion.div
-            key={item.fileName}
-            className="card mod-row"
-            style={{ alignItems: 'center', opacity: item.enabled ? 1 : 0.55 }}
-            layout
-          >
-            {item.iconUrl ? (
-              <img className="mod-icon" src={item.iconUrl} alt="" style={{ width: 44, height: 44 }} />
-            ) : (
-              <span className="mod-icon" style={{ width: 44, height: 44 }}>
-                <Package size={18} />
+        <>
+          <div className="il-bar">
+            <div className="il-stats">
+              <span>
+                <strong>{counts.all}</strong> {counts.all === 1 ? KIND_LABELS[kind].singular.toLowerCase() : plural}
               </span>
-            )}
-            <div
-              className="mod-meta"
-              style={{ cursor: item.modrinthProjectId ? 'pointer' : 'default' }}
-              onClick={() => item.modrinthProjectId && openProject(item.modrinthProjectId)}
-            >
-              <div className="mod-title">
-                {item.name}
-                {item.version && <span className="author">{item.version}</span>}
-                {item.updateVersionId && (
-                  <span className="badge accent">Update: {item.updateVersionNumber}</span>
-                )}
-                {!item.enabled && <span className="badge">Disabled</span>}
-              </div>
-              <div className="tiny" style={{ marginTop: 3 }}>
-                {item.fileName} · {formatBytes(item.fileSize)}
-                {item.author ? ` · by ${item.author}` : ''}
-              </div>
+              <span className="tiny">{formatBytes(totalSize)}</span>
+              {counts.updates > 0 && <span className="il-update-pill">{counts.updates} to update</span>}
             </div>
-            <div className="row" style={{ gap: 10 }}>
-              {item.updateVersionId && (
-                <Button
-                  variant="primary"
-                  icon={ArrowUpCircle}
-                  loading={updating.has(item.fileName)}
-                  onClick={() => void applyUpdate(item)}
-                >
-                  Update
+            <div className="row" style={{ gap: 8 }}>
+              {counts.updates > 0 && (
+                <Button variant="primary" icon={ArrowUpCircle} onClick={() => void updateAll()}>
+                  Update all
                 </Button>
               )}
-              <Toggle checked={item.enabled} onChange={(v) => void toggle(item, v)} />
-              <Button variant="danger" icon={Trash2} onClick={() => void startRemove(item)} aria-label="Remove" />
+              <Button icon={RefreshCw} loading={checking} onClick={() => void checkUpdates()}>
+                Check for updates
+              </Button>
             </div>
-          </motion.div>
-        ))
+          </div>
+
+          <div className="il-tools">
+            <div className="pf-search il-search">
+              <Search size={15} />
+              <input
+                className="input"
+                placeholder={`Filter ${plural}…`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                style={{ paddingLeft: 36, paddingRight: query ? 34 : undefined }}
+              />
+              {query && (
+                <button className="mb-clear" onClick={() => setQuery('')} title="Clear">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <div className="segmented">
+              {(['all', 'enabled', 'disabled', 'updates'] as Filter[]).map((f) => (
+                <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
+                  {f === 'all' ? 'All' : f === 'enabled' ? 'Enabled' : f === 'disabled' ? 'Disabled' : 'Updates'}
+                  <span className="il-count">{counts[f]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {shown.length === 0 ? (
+            <div className="card il-empty tiny">Nothing matches this filter.</div>
+          ) : (
+            <div className="il-list">
+              <AnimatePresence initial={false}>
+                {shown.map((item) => (
+                  <motion.div
+                    key={item.fileName}
+                    layout
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className={`il-row ${item.enabled ? '' : 'disabled'} ${item.updateVersionId ? 'has-update' : ''}`}
+                  >
+                    {item.iconUrl ? (
+                      <img className="mod-icon" src={item.iconUrl} alt="" style={{ width: 44, height: 44 }} />
+                    ) : (
+                      <span className="mod-icon" style={{ width: 44, height: 44 }}>
+                        <Package size={18} />
+                      </span>
+                    )}
+                    <div
+                      className={`il-main ${item.modrinthProjectId ? 'link' : ''}`}
+                      onClick={() => item.modrinthProjectId && openProject(item.modrinthProjectId)}
+                      title={item.modrinthProjectId ? 'Open on Modrinth' : undefined}
+                    >
+                      <div className="il-title">
+                        <span className="mb-ellipsis">{item.name ?? item.fileName}</span>
+                        {item.version && <span className="il-version">{item.version}</span>}
+                        {!item.enabled && <span className="badge">Disabled</span>}
+                      </div>
+                      <div className="il-meta">
+                        <span className="mb-ellipsis il-file" title={item.fileName}>
+                          {item.fileName}
+                        </span>
+                        <span>{formatBytes(item.fileSize)}</span>
+                        {item.author && <span className="mb-ellipsis">by {item.author}</span>}
+                      </div>
+                    </div>
+                    {item.updateVersionId && (
+                      <Button
+                        variant="primary"
+                        className="btn-sm"
+                        icon={ArrowUpCircle}
+                        loading={updating.has(item.fileName)}
+                        onClick={() => void applyUpdate(item)}
+                        title={`Update to ${item.updateVersionNumber}`}
+                      >
+                        {item.updateVersionNumber ?? 'Update'}
+                      </Button>
+                    )}
+                    <Toggle checked={item.enabled} onChange={(v) => void toggle(item, v)} />
+                    <Button
+                      variant="subtle"
+                      className="il-remove"
+                      icon={Trash2}
+                      onClick={() => void startRemove(item)}
+                      aria-label={`Remove ${item.name ?? item.fileName}`}
+                      title="Remove"
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </>
       )}
 
       <ConfirmDialog

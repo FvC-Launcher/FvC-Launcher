@@ -263,6 +263,53 @@ export const skinsService = {
   },
 
   /**
+   * Adopts a skin the player changed from inside the game (the mod marks the
+   * instance config with `changedInGame`), so the next launch doesn't revert it.
+   * Returns true when the account's skin changed.
+   */
+  syncFromInstance(profile: Profile, accountId: string): boolean {
+    const configDir = join(paths.instance(profile.id), 'config')
+    const configPath = join(configDir, 'fvc-skins.json')
+    if (!existsSync(configPath)) return false
+
+    let config: {
+      username?: string
+      skin?: boolean
+      model?: string
+      shared?: boolean
+      changedInGame?: string
+    }
+    try {
+      config = JSON.parse(readFileSync(configPath, 'utf-8'))
+    } catch {
+      return false
+    }
+    if (!config.changedInGame) return false
+
+    const account = accountsService.list().find((a) => a.id === accountId)
+    const matches =
+      account?.type === 'offline' && account.username.toLowerCase() === config.username?.toLowerCase()
+    if (matches) {
+      const png = join(configDir, 'fvc-skins', 'skin.png')
+      if (config.skin && existsSync(png)) {
+        mkdirSync(join(paths.userData, 'skins'), { recursive: true })
+        writeFileSync(skinFile(accountId), readFileSync(png))
+        saveRecord(accountId, {
+          model: config.model === 'slim' ? 'slim' : 'classic',
+          appliedAt: config.changedInGame,
+          shared: Boolean(config.shared)
+        })
+      } else if (!config.skin) {
+        this.forget(accountId)
+      }
+    }
+    // Consumed either way, so it's never applied to a different account later.
+    const { changedInGame: _c, shared: _s, ...rest } = config
+    writeFileSync(configPath, JSON.stringify(rest, null, 2), 'utf-8')
+    return matches
+  },
+
+  /**
    * Before launch: Fabric 26.2 instances get the bundled FvC Skins mod plus its
    * config (the active account's name and applied skin); any other instance
    * gets the mod removed so a version change can't leave an incompatible jar.
@@ -287,6 +334,14 @@ export const skinsService = {
       writeFileSync(modPath, readFileSync(BUNDLED_MOD))
     }
 
+    // A game that crashed or was killed before the launcher saw it close.
+    this.syncFromInstance(profile, accountId)
+
+    // Lets the mod upload skins changed in game. Passed through the environment
+    // (inherited by the game process) rather than a file in the instance, since
+    // profile exports include the config folder and JVM args show up in logs.
+    process.env.FVC_SKINS_SECRET = getStore().get().secret
+
     const account = accountsService.list().find((a) => a.id === accountId)
     const applied = account?.type === 'offline' ? this.getApplied(accountId) : null
     const configDir = join(gameDir, 'config')
@@ -307,6 +362,7 @@ export const skinsService = {
     const config = {
       serverUrl: SKIN_SERVER_URL || null,
       username: account?.username ?? null,
+      offline: account?.type === 'offline',
       skin: Boolean(applied),
       model: applied?.model ?? 'classic'
     }

@@ -1,24 +1,63 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Check,
   ChevronDown,
+  ChevronRight,
   Coffee,
+  Copy,
+  Eraser,
   FolderOpen,
+  Github,
   Maximize2,
   MemoryStick,
   Monitor,
+  Package,
   Play,
+  SlidersHorizontal,
   Square,
-  Terminal
+  Terminal,
+  type LucideIcon
 } from 'lucide-react'
-import { Avatar, Button, Modal, Select, Toggle } from '@/components/ui'
+import { Avatar, Button, EmptyState, Modal, Select, Toggle } from '@/components/ui'
 import { AddAccountModal } from '@/components/AddAccountModal'
+import { ProfileCover } from '@/components/ProfileCover'
 import { useApp, useSelectedProfile } from '@/store'
 import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
+import type { LaunchPhase } from '@shared/types'
+
+const STEPS: { phase: LaunchPhase; label: string }[] = [
+  { phase: 'verifying', label: 'Verify' },
+  { phase: 'java', label: 'Java' },
+  { phase: 'loader', label: 'Loader' },
+  { phase: 'assets', label: 'Assets' },
+  { phase: 'launching', label: 'Launch' }
+]
+
+function formatUptime(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+
+/** Re-renders every second while `active`, for live uptime counters. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!active) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [active])
+  return now
+}
 
 export function PlayPage(): ReactNode {
   const profiles = useApp((s) => s.profiles)
   const selectProfile = useApp((s) => s.selectProfile)
+  const openProfile = useApp((s) => s.openProfile)
   const navigate = useApp((s) => s.navigate)
   const launches = useApp((s) => s.launches)
   const settings = useApp((s) => s.settings)
@@ -33,6 +72,7 @@ export function PlayPage(): ReactNode {
   const [accountPickerOpen, setAccountPickerOpen] = useState(false)
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [dontAskAgain, setDontAskAgain] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -54,6 +94,8 @@ export function PlayPage(): ReactNode {
   const busy = !!preparing
   // Without developer mode a running game turns Play into Stop.
   const showStop = !devMode && runningHere.length > 0
+  const now = useNow(runningHere.length > 0)
+  const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? null
 
   useEffect(() => {
     if (
@@ -97,15 +139,25 @@ export function PlayPage(): ReactNode {
     }
   }
 
+  const copyLogs = (): void => {
+    void navigator.clipboard
+      .writeText(logs.join('\n'))
+      .then(() => pushNotification({ type: 'success', title: 'Console output copied' }))
+      .catch(() => pushNotification({ type: 'error', title: 'Could not copy console output' }))
+  }
+
   if (!profile) {
     return (
-      <div className="play-hero">
-        <h1>No profile selected</h1>
-        <p className="muted">Create a profile to start playing.</p>
-        <Button variant="primary" onClick={() => navigate('profiles')}>
-          Go to Profiles
-        </Button>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="No profile selected"
+        hint="Create a profile to choose a Minecraft version, loader and mods."
+        action={
+          <Button variant="primary" onClick={() => navigate('profiles')}>
+            Go to Profiles
+          </Button>
+        }
+      />
     )
   }
 
@@ -113,186 +165,284 @@ export function PlayPage(): ReactNode {
   const resolution = profile.resolution ?? settings.defaultResolution
   const ram = profile.ramMb || settings.defaultRamMb
   const fullscreen = profile.fullscreen ?? settings.defaultFullscreen
+  const javaLabel = profile.javaPath || settings.defaultJavaPath || 'Automatic'
+  const stepIndex = preparing ? STEPS.findIndex((s) => s.phase === preparing.phase) : -1
+  const firstStart = runningHere.reduce<number | undefined>(
+    (min, l) => (l.startedAt && (!min || l.startedAt < min) ? l.startedAt : min),
+    undefined
+  )
 
   return (
-    <div className="stack" style={{ gap: 20 }}>
-      <div
-        className="play-hero"
-        style={
-          profile.backgroundImage
-            ? {
-                backgroundImage: `linear-gradient(180deg, rgba(15,17,21,0.55), rgba(15,17,21,0.9)), url("${profile.backgroundImage}")`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center'
-              }
-            : undefined
-        }
-      >
-        {/* Profile selector */}
-        <div style={{ width: 320 }}>
-          <Select
-            value={profile.id}
-            options={profiles.map((p) => ({
-              value: p.id,
-              label: p.name,
-              hint: `${p.minecraftVersion} · ${LOADER_LABELS[p.loader]}`
-            }))}
-            onChange={(id) => void selectProfile(id)}
-          />
+    <div className="stack" style={{ gap: 18 }}>
+      {/* ------------------------------------------------------------ Hero */}
+      <section className="play-stage">
+        <ProfileCover profile={profile} />
+
+        <div className="play-top">
+          <div className="play-switch">
+            <Select
+              value={profile.id}
+              options={profiles.map((p) => ({
+                value: p.id,
+                label: p.name,
+                hint: `${p.minecraftVersion} · ${LOADER_LABELS[p.loader]}`
+              }))}
+              onChange={(id) => void selectProfile(id)}
+            />
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="pf-glass-btn lg"
+              title="Open folder"
+              aria-label="Open folder"
+              onClick={() => void window.fvc.profiles.openFolder(profile.id)}
+            >
+              <FolderOpen size={16} />
+            </button>
+            <button className="pf-back play-manage" onClick={() => openProfile(profile.id)}>
+              Manage profile <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
 
-        <span className="mod-icon" style={{ width: 84, height: 84, borderRadius: 20 }}>
-          <Icon size={38} />
-        </span>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2rem' }}>{profile.name}</h1>
-          <p className="muted" style={{ marginTop: 6 }}>
-            Minecraft {profile.minecraftVersion} · {LOADER_LABELS[profile.loader]}
-            {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
-          </p>
-          {profile.packSource && (
-            <p className="tiny" style={{ marginTop: 6 }} title={`github.com/${profile.packSource.repo}`}>
-              Auto-updates from GitHub
-              {profile.packSource.installedTag ? ` · ${profile.packSource.installedTag}` : ''}
-            </p>
-          )}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {showStop ? (
-            <motion.div key="stop" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <button
-                className="btn-play"
-                style={{ background: 'linear-gradient(135deg, #f87171, #fb923c)' }}
-                onClick={() => runningHere.forEach((l) => void window.fvc.launch.kill(l.sessionId))}
-              >
-                <Square fill="currentColor" strokeWidth={0} /> Stop
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div key="play" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <button
-                className="btn-play"
-                disabled={busy || preparingElsewhere}
-                title={preparingElsewhere ? 'Another game is still starting' : undefined}
-                onClick={requestStart}
-              >
-                {busy ? (
+        <div className="play-main">
+          <div className="play-identity">
+            <span className="pf-hero-icon">
+              <Icon size={32} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div className={`pf-hero-label ${runningHere.length ? 'running' : ''}`}>
+                {runningHere.length > 0 ? (
                   <>
-                    <span className="spinner" style={{ borderTopColor: '#06131a' }} />
-                    {preparing?.phase === 'launching' ? 'Launching…' : 'Preparing…'}
+                    <span className="dot" />
+                    {runningHere.length > 1 ? `${runningHere.length} instances running` : 'Running'}
+                    {firstStart ? ` · ${formatUptime(now - firstStart)}` : ''}
                   </>
+                ) : preparing ? (
+                  'Starting up'
                 ) : (
-                  <>
-                    <Play fill="currentColor" strokeWidth={0} />{' '}
-                    {devMode && runningHere.length > 0 ? 'Play another' : 'Play'}
-                  </>
+                  'Ready to play'
                 )}
-              </button>
+              </div>
+              <h1 className="play-title" title={profile.name}>
+                {profile.name}
+              </h1>
+              <div className="home-chips">
+                <span className="home-chip">Minecraft {profile.minecraftVersion}</span>
+                <span className="home-chip">
+                  {LOADER_LABELS[profile.loader]}
+                  {profile.loaderVersion ? ` ${profile.loaderVersion}` : ''}
+                </span>
+                {profile.packSource && (
+                  <span className="home-chip" title={`Auto-updates from github.com/${profile.packSource.repo}`}>
+                    <Github size={12} /> {profile.packSource.installedTag ?? 'Auto-update'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="play-cta">
+            <AnimatePresence mode="wait" initial={false}>
+              {showStop ? (
+                <motion.button
+                  key="stop"
+                  className="btn-play play-btn stop"
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  onClick={() => runningHere.forEach((l) => void window.fvc.launch.kill(l.sessionId))}
+                >
+                  <Square fill="currentColor" strokeWidth={0} /> Stop
+                </motion.button>
+              ) : (
+                <motion.button
+                  key="play"
+                  className="btn-play play-btn"
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  disabled={busy || preparingElsewhere}
+                  title={preparingElsewhere ? 'Another game is still starting' : undefined}
+                  onClick={requestStart}
+                >
+                  {busy ? (
+                    <>
+                      <span className="spinner" />
+                      {preparing?.phase === 'launching' ? 'Launching…' : 'Preparing…'}
+                    </>
+                  ) : (
+                    <>
+                      <Play fill="currentColor" strokeWidth={0} />
+                      {devMode && runningHere.length > 0 ? 'Play another' : 'Play'}
+                    </>
+                  )}
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            <button
+              className="play-account"
+              onClick={() => navigate('accounts')}
+              title="Manage accounts"
+            >
+              {activeAccount ? (
+                <>
+                  <Avatar
+                    username={activeAccount.type === 'microsoft' ? activeAccount.username : ''}
+                    size={22}
+                    radius={6}
+                  />
+                  <span>
+                    Playing as <strong>{activeAccount.username}</strong>
+                  </span>
+                </>
+              ) : (
+                <span>No account — add one to play</span>
+              )}
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Launch progress, docked to the bottom of the banner */}
+        <AnimatePresence initial={false}>
+          {preparing && (
+            <motion.div
+              className="play-progress"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <div className="play-progress-inner">
+                <div className="play-steps">
+                  {STEPS.map((step, i) => (
+                    <span
+                      key={step.phase}
+                      className={`play-step ${i < stepIndex ? 'done' : i === stepIndex ? 'current' : ''}`}
+                    >
+                      <span className="play-step-dot">{i < stepIndex && <Check size={10} strokeWidth={3} />}</span>
+                      {step.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="play-progress-detail tiny">
+                  <span>{preparing.detail}</span>
+                  {preparing.progress >= 0 && <span>{Math.round(preparing.progress * 100)}%</span>}
+                </div>
+                <div className={`progress ${preparing.progress < 0 ? 'indeterminate' : ''}`}>
+                  <div style={{ width: preparing.progress < 0 ? undefined : `${preparing.progress * 100}%` }} />
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
+      </section>
 
-        {devMode && runningHere.length > 0 && (
-          <div className="stack" style={{ gap: 6, width: 380 }}>
+      {/* ---------------------------------------------------- Quick facts */}
+      <div className="play-facts">
+        <Fact icon={MemoryStick} label="Memory" value={`${(ram / 1024).toFixed(1)} GB`} />
+        <Fact icon={Coffee} label="Java" value={javaLabel} mono={javaLabel !== 'Automatic'} />
+        <Fact icon={Monitor} label="Resolution" value={`${resolution.width} × ${resolution.height}`} />
+        <Fact icon={Maximize2} label="Window" value={fullscreen ? 'Fullscreen' : 'Windowed'} />
+      </div>
+
+      {/* ----------------------------------------------- Running instances */}
+      {devMode && runningHere.length > 0 && (
+        <div className="card play-card">
+          <div className="play-card-head">
+            <span className="play-card-title">
+              <span className="play-live-dot" /> Running instances
+            </span>
+            <span className="tiny">{runningHere.length}</span>
+          </div>
+          <div className="play-instances">
             {runningHere.map((l, i) => (
-              <div key={l.sessionId} className="card row between" style={{ padding: '8px 12px', gap: 10 }}>
-                <span className="tiny">
-                  Instance {i + 1}
-                  {l.accountName ? ` · ${l.accountName}` : ''}
-                  {l.pid ? ` · PID ${l.pid}` : ''}
-                </span>
-                <Button icon={Square} onClick={() => void window.fvc.launch.kill(l.sessionId)}>
+              <div key={l.sessionId} className="play-instance">
+                <span className="play-instance-num">{i + 1}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                    {l.accountName ?? `Instance ${i + 1}`}
+                  </div>
+                  <div className="tiny">
+                    {l.pid ? `PID ${l.pid}` : 'Starting'}
+                    {l.startedAt ? ` · up ${formatUptime(now - l.startedAt)}` : ''}
+                  </div>
+                </div>
+                <Button variant="danger" icon={Square} onClick={() => void window.fvc.launch.kill(l.sessionId)}>
                   Stop
                 </Button>
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
-        <AnimatePresence>
-          {preparing && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              style={{ width: 380, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}
+      {/* --------------------------------------------------------- Console */}
+      <div className={`card play-card play-console ${showConsole ? 'open' : ''}`}>
+        <div className="play-card-head">
+          <button className="play-card-toggle" onClick={() => setShowConsole((v) => !v)} aria-expanded={showConsole}>
+            <span className="play-card-title">
+              <Terminal size={15} /> Console
+            </span>
+            {logs.length > 0 && <span className="badge">{logs.length} lines</span>}
+            <ChevronDown size={16} className="play-chev" />
+          </button>
+          {showConsole && (
+            <div className="row" style={{ gap: 6 }}>
+              <Button variant="subtle" icon={Copy} disabled={!logs.length} onClick={copyLogs} title="Copy output" aria-label="Copy output" />
+              <Button variant="subtle" icon={Eraser} disabled={!logs.length} onClick={() => setLogs([])} title="Clear" aria-label="Clear" />
+            </div>
+          )}
+        </div>
+        <AnimatePresence initial={false}>
+          {showConsole && (
+            <motion.pre
+              ref={logRef}
+              className="play-log"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 300 }}
+              exit={{ opacity: 0, height: 0 }}
             >
-              <span className="tiny">{preparing.detail}</span>
-              <div className="progress" style={{ width: '100%' }}>
-                <div
-                  style={{ width: preparing.progress < 0 ? '100%' : `${preparing.progress * 100}%`, opacity: preparing.progress < 0 ? 0.35 : 1 }}
-                />
-              </div>
-            </motion.div>
+              {logs.length === 0 ? (
+                <span className="play-log-empty">Game output will appear here…</span>
+              ) : (
+                logs.map((line, i) => (
+                  <span key={i} className={logLevel(line)}>
+                    {line}
+                    {'\n'}
+                  </span>
+                ))
+              )}
+            </motion.pre>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Quick facts row */}
-      <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <span className="badge">
-          <MemoryStick size={13} /> {(ram / 1024).toFixed(1)} GB RAM
-        </span>
-        <span className="badge">
-          <Coffee size={13} /> {profile.javaPath || settings.defaultJavaPath || 'Auto Java'}
-        </span>
-        <span className="badge">
-          <Monitor size={13} /> {resolution.width}×{resolution.height}
-        </span>
-        <span className="badge">
-          <Maximize2 size={13} /> {fullscreen ? 'Fullscreen' : 'Windowed'}
-        </span>
-        <div style={{ flex: 1 }} />
-        <Button icon={FolderOpen} onClick={() => void window.fvc.profiles.openFolder(profile.id)}>
-          Open folder
-        </Button>
-        <Button
-          icon={Terminal}
-          variant={showConsole ? 'primary' : 'ghost'}
-          onClick={() => setShowConsole((v) => !v)}
-        >
-          Console
-        </Button>
+      {/* ------------------------------------------------- Launch options */}
+      <div className={`card play-card ${optionsOpen ? 'open' : ''}`}>
+        <div className="play-card-head">
+          <button className="play-card-toggle" onClick={() => setOptionsOpen((v) => !v)} aria-expanded={optionsOpen}>
+            <span className="play-card-title">
+              <SlidersHorizontal size={15} /> Launch options
+            </span>
+            <span className="tiny">Memory, resolution and Java flags for this profile</span>
+            <ChevronDown size={16} className="play-chev" />
+          </button>
+        </div>
+        <AnimatePresence initial={false}>
+          {optionsOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <ProfileLaunchOptions />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-
-      {/* Console */}
-      <AnimatePresence>
-        {showConsole && (
-          <motion.pre
-            ref={logRef}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 280 }}
-            exit={{ opacity: 0, height: 0 }}
-            className="card"
-            style={{
-              padding: 16,
-              overflow: 'auto',
-              fontFamily: 'Consolas, monospace',
-              fontSize: '0.76rem',
-              lineHeight: 1.6,
-              color: 'var(--text-2)',
-              userSelect: 'text',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all'
-            }}
-          >
-            {logs.length === 0 ? 'Game output will appear here…' : logs.join('\n')}
-          </motion.pre>
-        )}
-      </AnimatePresence>
-
-      {/* Per-profile launch options */}
-      <details className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <summary
-          className="row between"
-          style={{ padding: '14px 18px', cursor: 'pointer', listStyle: 'none', fontWeight: 600, fontSize: '0.9rem' }}
-        >
-          Launch options for this profile
-          <ChevronDown size={16} style={{ color: 'var(--text-3)' }} />
-        </summary>
-        <ProfileLaunchOptions />
-      </details>
 
       {/* No account yet: same add-account chooser as the Accounts page,
           then continue straight into the launch. */}
@@ -347,6 +497,38 @@ export function PlayPage(): ReactNode {
   )
 }
 
+function logLevel(line: string): string {
+  if (/\b(ERROR|FATAL|Exception)\b/.test(line)) return 'log-error'
+  if (/\bWARN(ING)?\b/.test(line)) return 'log-warn'
+  return ''
+}
+
+function Fact({
+  icon: Icon,
+  label,
+  value,
+  mono
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  mono?: boolean
+}): ReactNode {
+  return (
+    <div className="play-fact">
+      <span className="play-fact-icon">
+        <Icon size={16} />
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div className="pf-hero-stat-label">{label}</div>
+        <div className={`play-fact-value ${mono ? 'mono' : ''}`} title={value}>
+          {value}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProfileLaunchOptions(): ReactNode {
   const profile = useSelectedProfile()
   const settings = useApp((s) => s.settings)
@@ -359,7 +541,7 @@ function ProfileLaunchOptions(): ReactNode {
   const resolution = profile.resolution ?? settings.defaultResolution
 
   return (
-    <div>
+    <div className="play-options">
       <div className="setting-row">
         <div>
           <div className="s-label">Allocated RAM</div>

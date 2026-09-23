@@ -98,7 +98,8 @@ const api: FvcApi = {
     resolve: (query) => ipcRenderer.invoke(CH.skinsResolve, query),
     getApplied: (accountId) => ipcRenderer.invoke(CH.skinsGetApplied, accountId),
     apply: (accountId, dataUrl, model) => ipcRenderer.invoke(CH.skinsApply, accountId, dataUrl, model),
-    remove: (accountId) => ipcRenderer.invoke(CH.skinsRemove, accountId)
+    remove: (accountId) => ipcRenderer.invoke(CH.skinsRemove, accountId),
+    onChanged: (cb) => subscribe(CH.skinsChanged, cb)
   },
   news: {
     launcher: () => ipcRenderer.invoke(CH.newsLauncher)
