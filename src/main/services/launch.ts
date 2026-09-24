@@ -41,8 +41,23 @@ function removeLater(sessionId: string, ms: number): void {
   }, ms)
 }
 
+/**
+ * Session tokens of games being launched or running. The console can be copied
+ * into bug reports, and with debug logging on it shows the full launch command,
+ * so these never reach it.
+ */
+const secrets = new Map<string, string[]>()
+
+function redact(line: string): string {
+  let out = line.replace(/(--accessToken\s+)\S+/g, '$1[hidden]')
+  for (const values of secrets.values()) {
+    for (const value of values) out = out.split(value).join('[hidden]')
+  }
+  return out
+}
+
 function log(line: string): void {
-  broadcast(CH.launchLog, line)
+  broadcast(CH.launchLog, redact(line))
 }
 
 const GC_ARGS: Record<string, string[]> = {
@@ -156,6 +171,14 @@ export const launchService = {
       // 1. Account / session
       setState({ phase: 'verifying', detail: 'Preparing account…' })
       const authorization = await accountsService.getLaunchAuth(accountId)
+      const meta = authorization.meta as { refresh?: unknown } | undefined
+      secrets.set(
+        sessionId,
+        // Offline accounts use the placeholder "offline", which isn't a secret.
+        [authorization.access_token, meta?.refresh].filter(
+          (v): v is string => typeof v === 'string' && v.length >= 20
+        )
+      )
 
       // 2. Java — Auto picks (and downloads) the correct major for this MC
       // version; Manual uses the configured executable. A per-profile
@@ -256,6 +279,8 @@ export const launchService = {
         } else {
           setState({ phase: 'stopped', detail: 'Game closed', progress: -1 })
         }
+        // All game output has arrived by the time the process closes.
+        secrets.delete(sessionId)
         removeLater(sessionId, 1500)
       })
 
@@ -285,6 +310,7 @@ export const launchService = {
       setState({ phase: 'launching', detail: 'Starting Minecraft…', progress: -1, pid: launched.pid })
       profilesService.update(profileId, { lastPlayed: new Date().toISOString() })
     } catch (err) {
+      secrets.delete(sessionId)
       const message = err instanceof Error ? err.message : String(err)
       setState({ phase: 'error', detail: message, error: message })
       notify({ type: 'error', title: 'Launch failed', body: message })

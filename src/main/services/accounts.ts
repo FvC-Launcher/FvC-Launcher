@@ -1,6 +1,6 @@
 ﻿import { safeStorage } from 'electron'
 import { createHash, randomUUID } from 'crypto'
-import { Auth, tokenUtils, type Minecraft } from 'msmc'
+import { Auth, Minecraft, lexicon } from 'msmc'
 import { JsonStore } from '../store'
 import { paths } from '../paths'
 import { broadcast, notify } from '../broadcast'
@@ -55,11 +55,16 @@ function decryptToken(stored: string): string {
 }
 
 /**
- * msmc rejects with plain lexicon objects ({ name, message }), not Errors.
+ * msmc rejects with plain objects, not Errors: `{ response, ts }` when an HTTP
+ * step fails (ts names the step), or lexicon `{ name, message }` objects.
  * Convert them so the real reason survives IPC instead of "[object Object]".
  */
 function asError(err: unknown): Error {
   if (err instanceof Error) return err
+  const failed = httpFailure(err)
+  if (failed) {
+    return new Error(`${lexicon.getCode(failed.ts as never)}${failed.status ? ` (HTTP ${failed.status})` : ''}`)
+  }
   if (err && typeof err === 'object') {
     const o = err as { name?: unknown; message?: unknown; error?: unknown; reason?: unknown }
     const parts = [o.name, o.message ?? o.error ?? o.reason].filter(
@@ -84,8 +89,22 @@ function offlineUuid(username: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+/** What we persist per Microsoft account (msmc's MCToken, JSON-encoded and encrypted). */
+interface StoredToken {
+  refresh: string
+  mcToken: string
+  profile: { id: string; name: string } & Record<string, unknown>
+  xuid?: string
+  exp: number
+}
+
+/** `mc.getToken(true)`, keeping the old refresh token if Microsoft didn't rotate it. */
+function tokenOf(mc: Minecraft, previousRefresh?: string): StoredToken {
+  const token = mc.getToken(true) as unknown as StoredToken
+  return { ...token, refresh: token.refresh || previousRefresh || '' }
+}
+
 function mcAccountFromMsmc(mc: Minecraft, existingId?: string): StoredAccount {
-  const token = mc.getToken(true)
   return {
     id: existingId ?? randomUUID(),
     type: 'microsoft',
@@ -94,30 +113,155 @@ function mcAccountFromMsmc(mc: Minecraft, existingId?: string): StoredAccount {
     expiresAt: new Date(mc.exp).toISOString(),
     needsRelogin: false,
     addedAt: new Date().toISOString(),
-    encryptedToken: encryptToken(JSON.stringify(token))
+    encryptedToken: encryptToken(JSON.stringify(tokenOf(mc)))
   }
 }
 
+// ------------------------------------------------------------------ sessions
+//
+// We restore sessions ourselves instead of msmc's tokenUtils.fromToken, which
+// (in msmc 5.0.5) only refreshes tokens that are still valid: once the stored
+// Minecraft token expired it returned the dead token as-is, the account kept
+// looking signed in, and every launch failed to authenticate until the account
+// was removed and re-added. It could also hang forever when a refresh failed.
+
+const HOUR = 3_600_000
+/** Launches get a token with at least this long left, so servers joined hours later still accept it. */
+const LAUNCH_VALIDITY_MS = 12 * HOUR
+/** Enough for a single API call such as changing the skin. */
+const API_VALIDITY_MS = 5 * 60_000
+
+/** One refresh per account at a time; concurrent callers share it instead of racing on the refresh token. */
+const inflight = new Map<string, Promise<Minecraft>>()
+
+/** Thrown when Microsoft rejected the session for good: only signing in again fixes it. */
+class SessionEndedError extends Error {}
+
+function httpFailure(err: unknown): { ts: string; status: number } | null {
+  if (!err || typeof err !== 'object' || !('ts' in err)) return null
+  const e = err as { ts?: unknown; response?: { status?: unknown } }
+  if (typeof e.ts !== 'string') return null
+  return { ts: e.ts, status: typeof e.response?.status === 'number' ? e.response.status : 0 }
+}
+
 /**
- * Restores a Microsoft session from its stored token (msmc refreshes it when
- * close to expiry) and persists the rotated refresh token.
+ * A client error from Microsoft, Xbox Live or Mojang (bad or revoked refresh
+ * token, account problem) means the session is gone. Network errors, timeouts,
+ * rate limits (429) and server errors are temporary and must not sign anyone out.
  */
-async function refreshedSession(stored: StoredAccount): Promise<Minecraft> {
-  if (!stored.encryptedToken) throw new Error('Session missing. Please sign in again.')
-  let mc: Minecraft
+function sessionEnded(err: unknown): boolean {
+  const failed = httpFailure(err)
+  if (!failed) return false
+  const { status } = failed
+  return status >= 400 && status < 500 && status !== 408 && status !== 429
+}
+
+function readToken(stored: StoredAccount): StoredToken {
+  if (!stored.encryptedToken) throw new SessionEndedError('No saved session.')
   try {
-    const auth = new Auth('select_account')
-    const token = JSON.parse(decryptToken(stored.encryptedToken))
-    mc = await tokenUtils.fromToken(auth, token, true)
+    const token = JSON.parse(decryptToken(stored.encryptedToken)) as StoredToken
+    if (!token.refresh || !token.mcToken) throw new Error('incomplete')
+    return token
+  } catch {
+    // Unreadable (e.g. the OS keyring changed): nothing to refresh with.
+    throw new SessionEndedError('The saved session could not be read.')
+  }
+}
+
+function sessionFromToken(token: StoredToken): Minecraft {
+  return new Minecraft(token.mcToken, token.profile as never, new Auth('select_account'), token.refresh, token.exp)
+}
+
+function findStored(id: string): StoredAccount {
+  const stored = getStore().get().accounts.find((a) => a.id === id)
+  if (!stored) throw new Error('Account not found.')
+  return stored
+}
+
+/** Re-reads the store at write time so concurrent updates to other fields and accounts aren't lost. */
+function updateStored(id: string, patch: (a: StoredAccount) => StoredAccount): void {
+  const file = getStore().get()
+  save({ ...file, accounts: file.accounts.map((a) => (a.id === id ? patch(a) : a)) })
+}
+
+function persistSession(id: string, mc: Minecraft, previousRefresh: string): void {
+  updateStored(id, (a) => ({
+    ...a,
+    username: mc.profile?.name ?? a.username,
+    uuid: mc.profile?.id ?? a.uuid,
+    expiresAt: new Date(mc.exp).toISOString(),
+    needsRelogin: false,
+    encryptedToken: encryptToken(JSON.stringify(tokenOf(mc, previousRefresh)))
+  }))
+}
+
+function markNeedsRelogin(id: string): void {
+  const stored = getStore().get().accounts.find((a) => a.id === id)
+  if (!stored || stored.needsRelogin) return
+  updateStored(id, (a) => ({ ...a, needsRelogin: true }))
+  notify({
+    type: 'warning',
+    title: 'Microsoft sign-in needed',
+    body: `The session for ${stored.username} has ended. Sign in again from the Accounts page; your account stays in the launcher.`
+  })
+}
+
+/** Errors that reach the UI: say what to do, not just what failed. */
+function friendlyError(err: unknown, username: string): Error {
+  if (err instanceof SessionEndedError || sessionEnded(err)) {
+    return new SessionEndedError(`The Microsoft session for ${username} has ended. Sign in again from the Accounts page.`)
+  }
+  if (httpFailure(err)?.status === 429) {
+    return new Error('Microsoft is limiting sign-in requests right now. Wait a minute and try again.')
+  }
+  return new Error(
+    `Couldn't reach Microsoft to refresh the session for ${username} (${asError(err).message}). Check your connection and try again.`
+  )
+}
+
+/**
+ * A working Minecraft session whose token stays valid for at least
+ * `minValidityMs`, refreshing it (and saving the rotated refresh token) when
+ * needed. If Microsoft can't be reached but the current token still works, that
+ * token is used rather than failing. A session Microsoft rejected flags the
+ * account for sign-in, which is the only thing that fixes it.
+ */
+async function ensureSession(id: string, minValidityMs: number, force = false): Promise<Minecraft> {
+  const stored = findStored(id)
+  if (stored.type !== 'microsoft') throw new Error('Only Microsoft accounts have a Minecraft session.')
+
+  let token: StoredToken
+  try {
+    token = readToken(stored)
   } catch (err) {
-    throw asError(err)
+    markNeedsRelogin(id)
+    throw friendlyError(err, stored.username)
+  }
+  if (!force && token.exp - Date.now() > minValidityMs) return sessionFromToken(token)
+
+  let task = inflight.get(id)
+  if (!task) {
+    task = (async () => {
+      const xbox = await new Auth('select_account').refresh(token.refresh)
+      const mc = await xbox.getMinecraft()
+      persistSession(id, mc, token.refresh)
+      return mc
+    })()
+    inflight.set(id, task)
+    void task.catch(() => undefined).finally(() => inflight.delete(id))
   }
 
-  const file = getStore().get()
-  const updated = mcAccountFromMsmc(mc, stored.id)
-  updated.addedAt = stored.addedAt
-  save({ ...file, accounts: file.accounts.map((a) => (a.id === stored.id ? updated : a)) })
-  return mc
+  try {
+    return await task
+  } catch (err) {
+    if (sessionEnded(err)) {
+      markNeedsRelogin(id)
+    } else if (token.exp - Date.now() > API_VALIDITY_MS) {
+      console.warn(`[accounts] refresh failed for ${stored.username}, using the current token:`, asError(err).message)
+      return sessionFromToken(token)
+    }
+    throw friendlyError(err, stored.username)
+  }
 }
 
 export const accountsService = {
@@ -176,7 +320,9 @@ export const accountsService = {
 
     const file = getStore().get()
     const existing = file.accounts.find((a) => a.type === 'microsoft' && a.uuid === mc.profile!.id)
+    // Signing in again to an account that's already here repairs it in place.
     const account = mcAccountFromMsmc(mc, existing?.id)
+    if (existing) account.addedAt = existing.addedAt
 
     const accounts = existing
       ? file.accounts.map((a) => (a.id === existing.id ? account : a))
@@ -185,37 +331,20 @@ export const accountsService = {
     return toPublic(account)
   },
 
+  /** "Refresh session" button: always asks Microsoft for a new token. */
   async refresh(id: string): Promise<Account> {
-    const file = getStore().get()
-    const stored = file.accounts.find((a) => a.id === id)
-    if (!stored) throw new Error('Account not found.')
+    const stored = findStored(id)
     if (stored.type === 'offline') return toPublic(stored)
-    if (!stored.encryptedToken) throw new Error('No stored session. Please sign in again.')
-
     try {
-      const auth = new Auth('select_account')
-      const token = JSON.parse(decryptToken(stored.encryptedToken))
-      const mc = await tokenUtils.fromToken(auth, token, true)
-      const updated = mcAccountFromMsmc(mc, stored.id)
-      updated.addedAt = stored.addedAt
-      save({
-        ...file,
-        accounts: file.accounts.map((a) => (a.id === id ? updated : a))
-      })
-      return toPublic(updated)
+      await ensureSession(id, 0, true)
     } catch (err) {
-      const updated: StoredAccount = { ...stored, needsRelogin: true }
-      save({
-        ...file,
-        accounts: file.accounts.map((a) => (a.id === id ? updated : a))
-      })
-      notify({
-        type: 'warning',
-        title: 'Session expired',
-        body: `Please sign in again with ${stored.username}.`
-      })
-      throw asError(err)
+      // A session that ended already notified; tell the user about anything else.
+      if (!(err instanceof SessionEndedError)) {
+        notify({ type: 'error', title: 'Could not refresh the session', body: asError(err).message })
+      }
+      throw err
     }
+    return toPublic(findStored(id))
   },
 
   /**
@@ -238,16 +367,13 @@ export const accountsService = {
       }
     }
 
-    const mc = await refreshedSession(stored)
+    const mc = await ensureSession(id, LAUNCH_VALIDITY_MS)
     return mc.mclc(true) as unknown as Record<string, unknown>
   },
 
-  /** A fresh Minecraft access token, for Microsoft-only APIs such as changing the skin. */
+  /** A valid Minecraft access token, for Microsoft-only APIs such as changing the skin. */
   async getAccessToken(id: string): Promise<string> {
-    const stored = getStore().get().accounts.find((a) => a.id === id)
-    if (!stored) throw new Error('Account not found.')
-    if (stored.type !== 'microsoft') throw new Error('Only Microsoft accounts have a Minecraft session.')
-    const mc = await refreshedSession(stored)
+    const mc = await ensureSession(id, API_VALIDITY_MS)
     return mc.mcToken
   },
 
@@ -261,16 +387,18 @@ export const accountsService = {
   },
 
   /**
-   * Startup: quietly refresh Microsoft sessions so users stay signed in.
-   * Failures mark the account as needing re-login; nothing blocks the UI.
+   * Startup: renew Microsoft sessions that are expired or close to it, so the
+   * next Play doesn't wait on Microsoft. Accounts flagged earlier are retried
+   * too: older versions flagged them on any error, including being offline.
+   * Temporary failures stay quiet; only a session Microsoft rejected asks the
+   * user to sign in again. Nothing blocks the UI.
    */
   refreshAllInBackground(): void {
     for (const account of getStore().get().accounts) {
-      if (account.type === 'microsoft' && !account.needsRelogin) {
-        void this.refresh(account.id).catch(() => {
-          /* handled inside refresh(): flags needsRelogin + notifies */
-        })
-      }
+      if (account.type !== 'microsoft') continue
+      void ensureSession(account.id, LAUNCH_VALIDITY_MS, !!account.needsRelogin).catch((err) => {
+        console.warn(`[accounts] background refresh for ${account.username}:`, asError(err).message)
+      })
     }
   }
 }
