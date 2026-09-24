@@ -179,7 +179,7 @@ export function AccountsPage(): ReactNode {
 function statusLine(account: Account): string {
   if (account.type === 'offline') return `Offline · added ${formatRelative(account.addedAt)}`
   if (account.needsRelogin) return 'Sign in again to keep playing online'
-  return `Signed in · refreshed ${formatRelative(account.addedAt)}`
+  return `Signed in · refreshed ${formatRelative(account.refreshedAt ?? account.addedAt)}`
 }
 
 // ============================================================== Hero

@@ -29,8 +29,15 @@ function getStore(): JsonStore<AccountsFile> {
   return store
 }
 
+/** msmc gives every new Minecraft token this long; see the Minecraft constructor's default `exp`. */
+const TOKEN_LIFETIME_MS = 23 * 60 * 60 * 1000
+
 function toPublic(a: StoredAccount): Account {
   const { encryptedToken: _encryptedToken, ...pub } = a
+  // Sessions saved before refreshedAt was recorded: the token's expiry says when it was issued.
+  if (pub.type === 'microsoft' && !pub.refreshedAt && pub.expiresAt) {
+    pub.refreshedAt = new Date(new Date(pub.expiresAt).getTime() - TOKEN_LIFETIME_MS).toISOString()
+  }
   return pub
 }
 
@@ -112,6 +119,7 @@ function mcAccountFromMsmc(mc: Minecraft, existingId?: string): StoredAccount {
     uuid: mc.profile?.id ?? '',
     expiresAt: new Date(mc.exp).toISOString(),
     needsRelogin: false,
+    refreshedAt: new Date().toISOString(),
     addedAt: new Date().toISOString(),
     encryptedToken: encryptToken(JSON.stringify(tokenOf(mc)))
   }
@@ -191,6 +199,7 @@ function persistSession(id: string, mc: Minecraft, previousRefresh: string): voi
     uuid: mc.profile?.id ?? a.uuid,
     expiresAt: new Date(mc.exp).toISOString(),
     needsRelogin: false,
+    refreshedAt: new Date().toISOString(),
     encryptedToken: encryptToken(JSON.stringify(tokenOf(mc, previousRefresh)))
   }))
 }

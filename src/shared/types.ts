@@ -26,6 +26,8 @@ export interface Account {
   expiresAt?: string
   /** True when the stored session failed to refresh and needs re-login. */
   needsRelogin?: boolean
+  /** Only for microsoft accounts: ISO date when the session was last renewed with Microsoft. */
+  refreshedAt?: string
   addedAt: string
 }
 
