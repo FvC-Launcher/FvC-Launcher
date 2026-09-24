@@ -10,10 +10,10 @@ import type { UpdaterState } from '@shared/types'
 /**
  * GitHub-Releases auto updates (electron-updater).
  *
- * Consent-first flow — nothing is downloaded or installed silently:
+ * Consent-first flow — nothing is downloaded or installed without asking:
  *   check → 'available' → renderer popup → user clicks Download →
  *   'downloading' (progress) → 'downloaded' → user picks Restart now /
- *   on next quit.
+ *   on next quit. Either way the installer itself runs without any UI.
  *
  * The publish target (owner/repo) comes from electron-builder.yml and is
  * baked into the packaged app as app-update.yml.
@@ -256,8 +256,10 @@ export const updaterService = {
 
   install(): void {
     if (!canSelfUpdate || state.status !== 'downloaded') return
-    // isSilent=false shows the platform installer UI, forceRunAfter=true
-    // relaunches the app when it finishes.
-    autoUpdater.quitAndInstall(false, true)
+    // Silent: the NSIS installer runs with /S --updated, skipping every page
+    // and reusing the current install folder, so an update just looks like
+    // the launcher restarting. forceRunAfter relaunches it when done. (The
+    // first install still shows the full setup; only updates are silent.)
+    autoUpdater.quitAndInstall(true, true)
   }
 }
