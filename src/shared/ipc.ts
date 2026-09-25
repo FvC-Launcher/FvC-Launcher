@@ -188,6 +188,8 @@ export interface FvcApi {
     clearCache(): Promise<void>
     openExternal(url: string): void
     pickImage(): Promise<string | null>
+    /** Pick an image and get its contents as a data: URL (null if cancelled). */
+    pickImageData(): Promise<string | null>
     appVersion(): Promise<string>
     platform: string
   }
@@ -332,6 +334,7 @@ export const CH = {
   sysClearCache: 'system:clearCache',
   sysOpenExternal: 'system:openExternal',
   sysPickImage: 'system:pickImage',
+  sysPickImageData: 'system:pickImageData',
   sysAppVersion: 'system:appVersion',
 
   newsLauncher: 'news:launcher',

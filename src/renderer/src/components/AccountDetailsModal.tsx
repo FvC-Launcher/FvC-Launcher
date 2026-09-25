@@ -25,7 +25,7 @@ import {
 import { Button, Modal } from '@/components/ui'
 import { SkinViewer } from '@/components/SkinViewer'
 import { formatPlayTime, formatRelative, useApp } from '@/store'
-import { profileIcon } from '@/lib'
+import { ProfileIcon } from '@/components/ProfileIcon'
 import type { Account, AccountAppearance, AccountStats } from '@shared/types'
 
 const MODEL_SCALE = 9
@@ -470,11 +470,10 @@ function ProfileBreakdown({ stats }: { stats: AccountStats | undefined }): React
         <div className="acc-d-profiles">
           {rows.map((row) => {
             const profile = profiles.find((p) => p.id === row.id)
-            const Icon = profileIcon(profile?.icon ?? '')
             return (
               <div key={row.id} className="acc-d-profile">
                 <span className="acc-d-profile-icon">
-                  <Icon size={16} />
+                  <ProfileIcon icon={profile?.icon ?? ''} size={16} />
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="acc-d-profile-top">

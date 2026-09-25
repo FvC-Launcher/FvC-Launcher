@@ -54,6 +54,11 @@ export function profileIcon(name: string): LucideIcon {
   return PROFILE_ICONS[name] ?? Package
 }
 
+/** An uploaded image (data: URL) rather than a built-in icon name. */
+export function isImageIcon(icon: string): boolean {
+  return icon.startsWith('data:image/')
+}
+
 export const KIND_LABELS: Record<ContentKind, { singular: string; plural: string }> = {
   mod: { singular: 'Mod', plural: 'Mods' },
   resourcepack: { singular: 'Resource Pack', plural: 'Resource Packs' },

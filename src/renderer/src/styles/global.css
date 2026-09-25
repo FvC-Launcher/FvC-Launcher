@@ -1827,6 +1827,12 @@ textarea {
   transform: rotate(-12deg);
   transition: transform var(--dur-slow) var(--ease);
 }
+/* An uploaded icon stands in for the glyph: same spot, just as faint. */
+.pf-cover-glyph-img {
+  object-fit: cover;
+  border-radius: 22%;
+  opacity: 0.2;
+}
 .pf-cover-img {
   position: absolute;
   inset: 0;
@@ -2318,6 +2324,15 @@ textarea {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.1);
   box-shadow: inset 0 0 0 1px var(--line);
+}
+.pf-setting-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb), 0.14);
 }
 .pf-path {
   max-width: 520px;
@@ -4159,6 +4174,26 @@ button.acc-hero-model:hover {
   color: var(--accent);
   background: rgba(var(--accent-rgb), 0.12);
   box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), 0.7);
+}
+.wz-icon-upload:not(.has-image) {
+  box-shadow: none;
+  border: 1.5px dashed var(--line-strong);
+}
+.wz-icon-upload.has-image {
+  overflow: hidden;
+  /* The image covers an inset ring; mark the selection outside it. */
+  outline: 2px solid rgba(var(--accent-rgb), 0.8);
+  outline-offset: 2px;
+}
+
+/* An uploaded profile icon fills its tile, whatever the tile's size and shape. */
+.profile-icon-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  -webkit-user-drag: none;
 }
 .wz-cover {
   display: flex;

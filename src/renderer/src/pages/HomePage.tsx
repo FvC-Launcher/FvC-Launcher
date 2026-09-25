@@ -28,7 +28,8 @@ import {
   useApp,
   useSelectedProfile
 } from '@/store'
-import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
+import { LOADER_LABELS, PREPARING_PHASES } from '@/lib'
+import { ProfileIcon } from '@/components/ProfileIcon'
 import type { ModrinthSearchHit, NewsItem, Profile } from '@shared/types'
 
 const DONATE_URL = 'https://ko-fi.com/fvclauncher'
@@ -376,13 +377,12 @@ function FeaturedProfile({
   onPlay: () => void
   onManage: () => void
 }): ReactNode {
-  const Icon = profileIcon(profile.icon)
   return (
     <section className="home-feature">
       <ProfileCover profile={profile} />
       <div className="home-feature-body">
         <span className="pf-hero-icon home-feature-icon">
-          <Icon size={28} />
+          <ProfileIcon icon={profile.icon} size={28} />
         </span>
         <div className={`pf-hero-label ${running ? 'running' : ''}`}>
           {running ? (

@@ -1,6 +1,7 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { totalmem } from 'os'
-import { rmSync } from 'fs'
+import { readFileSync, rmSync, statSync } from 'fs'
+import { extname } from 'path'
 import { CH } from '@shared/ipc'
 import { notify } from './broadcast'
 import { paths } from './paths'
@@ -23,6 +24,15 @@ import { legalService } from './services/legal'
 import { updaterService } from './services/updater'
 import { discordService } from './services/discord'
 import { background } from './background'
+
+/** Image files the pickers accept, by extension. */
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif'
+}
 
 export function registerIpc(): void {
   // Window controls
@@ -155,15 +165,28 @@ export function registerIpc(): void {
   ipcMain.on(CH.sysOpenExternal, (_e, url: string) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
-  ipcMain.handle(CH.sysPickImage, async (e) => {
+  const pickImageFile = async (e: Electron.IpcMainInvokeEvent): Promise<string | null> => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const result = await dialog.showOpenDialog(win!, {
       title: 'Choose image',
       properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }]
+      filters: [{ name: 'Images', extensions: Object.keys(IMAGE_TYPES) }]
     })
     if (result.canceled || result.filePaths.length === 0) return null
-    return 'fvc-file:///' + result.filePaths[0].replace(/\\/g, '/')
+    return result.filePaths[0]
+  }
+  ipcMain.handle(CH.sysPickImage, async (e) => {
+    const file = await pickImageFile(e)
+    return file && 'fvc-file:///' + file.replace(/\\/g, '/')
+  })
+  // As a data: URL, so the renderer can draw it to a canvas (an fvc-file://
+  // image would taint it) — used to shrink uploaded profile icons.
+  ipcMain.handle(CH.sysPickImageData, async (e) => {
+    const file = await pickImageFile(e)
+    if (!file) return null
+    if (statSync(file).size > 20 * 1024 * 1024) throw new Error('Pick an image smaller than 20 MB.')
+    const type = IMAGE_TYPES[extname(file).slice(1).toLowerCase()] ?? 'image/png'
+    return `data:${type};base64,${readFileSync(file).toString('base64')}`
   })
   ipcMain.handle(CH.sysAppVersion, () => app.getVersion())
 

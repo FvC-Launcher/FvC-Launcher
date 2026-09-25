@@ -93,6 +93,7 @@ const api: FvcApi = {
     clearCache: () => ipcRenderer.invoke(CH.sysClearCache),
     openExternal: (url) => ipcRenderer.send(CH.sysOpenExternal, url),
     pickImage: () => ipcRenderer.invoke(CH.sysPickImage),
+    pickImageData: () => ipcRenderer.invoke(CH.sysPickImageData),
     appVersion: () => ipcRenderer.invoke(CH.sysAppVersion),
     platform: process.platform
   },

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { profileIcon } from '@/lib'
+import { isImageIcon, profileIcon } from '@/lib'
 import type { Profile } from '@shared/types'
 
 /** Stable hue per profile, so cards without a cover image are still easy to tell apart. */
@@ -23,6 +23,8 @@ export function ProfileCover({
     >
       {profile.backgroundImage ? (
         <div className="pf-cover-img" style={{ backgroundImage: `url("${profile.backgroundImage}")` }} />
+      ) : isImageIcon(profile.icon) ? (
+        <img className="pf-cover-glyph pf-cover-glyph-img" src={profile.icon} alt="" draggable={false} />
       ) : (
         <Icon className="pf-cover-glyph" strokeWidth={1.25} />
       )}

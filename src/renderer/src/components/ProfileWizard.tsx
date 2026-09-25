@@ -24,7 +24,8 @@ import { Button, Input, Modal, Progress, Select, Toggle } from '@/components/ui'
 import { ProfileCover } from '@/components/ProfileCover'
 import { CommunityPackList } from '@/components/CommunityPackList'
 import { formatCount, formatRelative, useApp } from '@/store'
-import { LOADERS, LOADER_LABELS, PROFILE_ICONS, profileIcon, titleCase } from '@/lib'
+import { ProfileIcon, ProfileIconPicker } from '@/components/ProfileIcon'
+import { LOADERS, LOADER_LABELS, titleCase } from '@/lib'
 import type {
   CurseForgePack,
   LoaderId,
@@ -768,19 +769,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
 
                     <div className="wz-field">
                       <div className="wz-label">Icon</div>
-                      <div className="wz-icons">
-                        {Object.entries(PROFILE_ICONS).map(([iconName, Icon]) => (
-                          <button
-                            key={iconName}
-                            className={`wz-icon ${icon === iconName ? 'active' : ''}`}
-                            onClick={() => setIcon(iconName)}
-                            aria-label={iconName}
-                            title={iconName}
-                          >
-                            <Icon size={18} />
-                          </button>
-                        ))}
-                      </div>
+                      <ProfileIconPicker value={icon} onChange={setIcon} />
                     </div>
 
                     <div className="wz-field">
@@ -1051,8 +1040,7 @@ export function ProfileWizard({ open, onClose }: { open: boolean; onClose: () =>
 // ------------------------------------------------------------ small parts
 
 function PreviewIcon({ name }: { name: string }): ReactNode {
-  const Icon = profileIcon(name)
-  return <Icon size={22} />
+  return <ProfileIcon icon={name} size={22} />
 }
 
 function KindCard({

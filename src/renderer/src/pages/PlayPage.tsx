@@ -23,7 +23,8 @@ import { Avatar, Button, EmptyState, Modal, Select, Toggle } from '@/components/
 import { AddAccountModal } from '@/components/AddAccountModal'
 import { ProfileCover } from '@/components/ProfileCover'
 import { useApp, useSelectedProfile } from '@/store'
-import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
+import { LOADER_LABELS, PREPARING_PHASES } from '@/lib'
+import { ProfileIcon } from '@/components/ProfileIcon'
 import type { LaunchPhase } from '@shared/types'
 
 const STEPS: { phase: LaunchPhase; label: string }[] = [
@@ -161,7 +162,6 @@ export function PlayPage(): ReactNode {
     )
   }
 
-  const Icon = profileIcon(profile.icon)
   const resolution = profile.resolution ?? settings.defaultResolution
   const ram = profile.ramMb || settings.defaultRamMb
   const fullscreen = profile.fullscreen ?? settings.defaultFullscreen
@@ -208,7 +208,7 @@ export function PlayPage(): ReactNode {
         <div className="play-main">
           <div className="play-identity">
             <span className="pf-hero-icon">
-              <Icon size={32} />
+              <ProfileIcon icon={profile.icon} size={32} />
             </span>
             <div style={{ minWidth: 0 }}>
               <div className={`pf-hero-label ${runningHere.length ? 'running' : ''}`}>

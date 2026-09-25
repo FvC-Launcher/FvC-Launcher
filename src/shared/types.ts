@@ -149,7 +149,8 @@ export interface GithubExportOptions {
 export interface Profile {
   id: string
   name: string
-  icon: string // lucide icon name or 'img:<filename>' inside the profile dir
+  /** Built-in (lucide) icon name, or an uploaded image as a small square data: URL. */
+  icon: string
   backgroundImage?: string
   minecraftVersion: string
   loader: LoaderId

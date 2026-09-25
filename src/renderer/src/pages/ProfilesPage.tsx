@@ -15,6 +15,7 @@ import {
   Github,
   HardDrive,
   Image,
+  ImagePlus,
   MemoryStick,
   MoreVertical,
   Package,
@@ -22,6 +23,7 @@ import {
   Play,
   Plus,
   Search,
+  Shapes,
   SlidersHorizontal,
   Sparkles,
   Star,
@@ -37,7 +39,8 @@ import { ModBrowser } from '@/components/ModBrowser'
 import { ProfileWizard } from '@/components/ProfileWizard'
 import { formatPlayTime, formatRelative, useApp } from '@/store'
 import { ProfileCover } from '@/components/ProfileCover'
-import { LOADER_LABELS, PREPARING_PHASES, profileIcon } from '@/lib'
+import { ProfileIcon, ProfileIconPicker, useUploadIcon } from '@/components/ProfileIcon'
+import { LOADER_LABELS, PREPARING_PHASES } from '@/lib'
 import type { ContentKind, Profile, ProfileExportMode } from '@shared/types'
 
 export function ProfilesPage(): ReactNode {
@@ -258,7 +261,6 @@ function ProfileGrid(): ReactNode {
           ) : (
             <div className="pf-grid">
               {visible.map((profile) => {
-                const Icon = profileIcon(profile.icon)
                 const mine = launches.filter((l) => l.profileId === profile.id)
                 const running = mine.some((l) => l.phase === 'running')
                 const preparing = mine.some((l) => PREPARING_PHASES.includes(l.phase))
@@ -320,7 +322,7 @@ function ProfileGrid(): ReactNode {
 
                     <div className="pf-card-body">
                       <span className="pf-card-icon">
-                        <Icon size={22} />
+                        <ProfileIcon icon={profile.icon} size={22} />
                       </span>
                       <h3 className="pf-card-name" title={profile.name}>
                         {profile.name}
@@ -615,7 +617,6 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
     )
   }
 
-  const Icon = profileIcon(profile.icon)
   const mine = launches.filter((l) => l.profileId === profile.id)
   const preparing = mine.find((l) => PREPARING_PHASES.includes(l.phase))
   const running = mine.some((l) => l.phase === 'running')
@@ -653,7 +654,7 @@ function ProfileDetail({ profileId }: { profileId: string }): ReactNode {
 
         <div className="pf-hero-main">
           <span className="pf-hero-icon">
-            <Icon size={32} />
+            <ProfileIcon icon={profile.icon} size={32} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className={`pf-hero-label ${running ? 'running' : ''}`}>
@@ -775,6 +776,8 @@ function HeroStat({ icon: Icon, label, value }: { icon: LucideIcon; label: strin
 
 function ProfileSettings({ profile }: { profile: Profile }): ReactNode {
   const pushNotification = useApp((s) => s.pushNotification)
+  const { upload, uploading } = useUploadIcon()
+  const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const patch = (p: Partial<Profile>): void => {
     void window.fvc.profiles.update(profile.id, p).catch((err) =>
       pushNotification({ type: 'error', title: 'Could not save', body: String(err) })
@@ -782,6 +785,42 @@ function ProfileSettings({ profile }: { profile: Profile }): ReactNode {
   }
   return (
     <div className="card pf-settings">
+      <div className="setting-row">
+        <div className="pf-setting-info">
+          <span className="pf-setting-media">
+            <span className="pf-setting-icon">
+              <ProfileIcon icon={profile.icon} size={20} />
+            </span>
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div className="s-label">Icon</div>
+            <div className="s-desc">A built-in icon or your own image, shown on the profile card, Home and Play</div>
+          </div>
+        </div>
+        <div className="s-control row" style={{ gap: 8 }}>
+          <Button
+            icon={ImagePlus}
+            loading={uploading}
+            onClick={() => void upload().then((icon) => icon && patch({ icon }))}
+          >
+            Upload image
+          </Button>
+          <Button icon={Shapes} onClick={() => setIconPickerOpen(true)}>
+            Choose icon
+          </Button>
+        </div>
+        <Modal open={iconPickerOpen} onClose={() => setIconPickerOpen(false)} title="Profile icon">
+          <div className="modal-body">
+            <ProfileIconPicker
+              value={profile.icon}
+              onChange={(icon) => {
+                patch({ icon })
+                setIconPickerOpen(false)
+              }}
+            />
+          </div>
+        </Modal>
+      </div>
       <div className="setting-row">
         <div className="pf-setting-info">
           <div className="pf-setting-media">
