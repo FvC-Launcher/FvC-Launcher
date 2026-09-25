@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FvC Launcher</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;"
+    />
+  </head>
+  <body>
+    <main class="splash busy">
+      <img class="splash-logo" src="/src/assets/icon.png" alt="" />
+      <h1>FvC Launcher</h1>
+      <div role="status" aria-live="polite">
+        <p class="splash-status" id="status">Checking for updates…</p>
+        <p class="splash-detail" id="detail"></p>
+      </div>
+      <div class="splash-foot">
+        <div class="splash-progress" id="progress" hidden><div id="bar"></div></div>
+        <div class="splash-actions" id="actions" hidden>
+          <button class="btn btn-primary" id="retry">Retry</button>
+          <button class="btn btn-ghost" id="continue">Continue</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/splash/main.ts"></script>
+  </body>
+</html>

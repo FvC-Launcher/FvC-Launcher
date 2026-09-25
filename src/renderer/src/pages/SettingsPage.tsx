@@ -291,6 +291,19 @@ export function SettingsPage(): ReactNode {
             >
               <Toggle checked={settings.checkLauncherUpdates} onChange={(v) => set({ checkLauncherUpdates: v })} />
             </Row>
+            {window.fvc.system.platform === 'win32' && (
+              <Row
+                label="Update before opening"
+                description="Check in a small window when the launcher starts and install new versions automatically. Turn off to be asked in a popup instead."
+                keywords="startup splash automatic install window"
+              >
+                <Toggle
+                  checked={settings.updateOnStartup}
+                  disabled={!settings.checkLauncherUpdates}
+                  onChange={(v) => set({ updateOnStartup: v })}
+                />
+              </Row>
+            )}
             <Row
               label="Alpha builds"
               description="Also update to pre-releases, so you always get the newest version on GitHub. They can be unstable. Turning this off keeps your current version until a newer stable release is out."

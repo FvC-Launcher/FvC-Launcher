@@ -1,0 +1,190 @@
+/* Startup update window. Theme variables are set by main.ts from the URL;
+   these defaults are FvC Dark. */
+:root {
+  --bg: #0f1115;
+  --text: #ffffff;
+  --text-2: #aeb7c2;
+  --text-3: #6d7683;
+  --hover: rgba(255, 255, 255, 0.06);
+  --hover-strong: rgba(255, 255, 255, 0.11);
+  --control-bg: #2b323e;
+  --on-accent: #06131a;
+  --accent: #3bcbff;
+  --accent-2: #7b5bff;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+  /* Frameless: drag the window from anywhere but the buttons. */
+  -webkit-app-region: drag;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.splash {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 34px 26px 26px;
+  animation: splash-in 0.45s var(--ease) both;
+}
+
+.splash-logo {
+  width: 124px;
+  height: 124px;
+  -webkit-user-drag: none;
+}
+.splash.busy .splash-logo {
+  animation: splash-breathe 2.4s ease-in-out infinite;
+}
+
+.splash h1 {
+  margin-top: 10px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.splash-status {
+  margin-top: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.splash-detail {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Fixed-height slot at the bottom so the bar and the buttons swap in place. */
+.splash-foot {
+  margin-top: auto;
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.splash-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--control-bg);
+  overflow: hidden;
+}
+.splash-progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.2s linear;
+}
+.splash-progress.indeterminate > div {
+  width: 35%;
+  animation: splash-indeterminate 1.2s var(--ease) infinite;
+}
+
+.splash-actions {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition:
+    background 0.15s var(--ease),
+    filter 0.15s var(--ease),
+    transform 0.15s var(--ease),
+    opacity 0.15s var(--ease);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn-ghost {
+  background: var(--hover);
+  color: var(--text);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--hover-strong);
+}
+
+@keyframes splash-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes splash-breathe {
+  50% {
+    transform: scale(1.04);
+  }
+}
+@keyframes splash-indeterminate {
+  0% {
+    margin-left: -35%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash.busy .splash-logo,
+  .splash-progress.indeterminate > div {
+    animation: none;
+  }
+}

@@ -8,6 +8,7 @@ import { broadcast } from './broadcast'
 import { accountsService } from './services/accounts'
 import { updaterService } from './services/updater'
 import { discordService } from './services/discord'
+import { splash } from './splash'
 import { CH } from '@shared/ipc'
 
 interface WindowState {
@@ -137,12 +138,20 @@ if (!gotLock) {
 
     registerIpc()
 
-    createWindow()
+    // Windows: check for and install launcher updates before opening.
+    let checkedForUpdates = false
+    if (splash.shouldShow()) {
+      const outcome = await splash.run()
+      if (outcome === 'quit') return
+      checkedForUpdates = outcome === 'checked'
+    }
+
+    splash.closeWhenShown(createWindow())
 
     // Keep Microsoft sessions fresh without blocking startup.
     setTimeout(() => accountsService.refreshAllInBackground(), 2500)
     // Check GitHub Releases for launcher updates (packaged builds only).
-    updaterService.init()
+    updaterService.init({ alreadyChecked: checkedForUpdates })
     // Show what the player is doing on their Discord profile.
     discordService.init()
 

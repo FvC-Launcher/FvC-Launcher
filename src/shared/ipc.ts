@@ -32,6 +32,7 @@ import type {
   ProfileExportMode,
   ResolvedSkin,
   SkinModel,
+  SplashState,
   UpdaterState
 } from './types'
 
@@ -247,6 +248,15 @@ export interface FvcApi {
   onAccountsChanged(cb: () => void): () => void
 }
 
+/** Bridge for the startup update window (window.fvcSplash, Windows only). */
+export interface SplashApi {
+  getState(): Promise<SplashState>
+  onState(cb: (state: SplashState) => void): () => void
+  retry(): void
+  /** Open the launcher without updating. */
+  skip(): void
+}
+
 // Channel names (single source of truth)
 export const CH = {
   winMinimize: 'win:minimize',
@@ -353,6 +363,11 @@ export const CH = {
   updaterInstall: 'updater:install',
   updaterGetState: 'updater:getState',
   updaterState: 'updater:state',
+
+  splashGetState: 'splash:getState',
+  splashState: 'splash:state',
+  splashRetry: 'splash:retry',
+  splashSkip: 'splash:skip',
 
   discordSetPage: 'discord:setPage',
 

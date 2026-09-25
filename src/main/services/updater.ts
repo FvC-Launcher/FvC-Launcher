@@ -17,6 +17,10 @@ import type { UpdaterState } from '@shared/types'
  *
  * The publish target (owner/repo) comes from electron-builder.yml and is
  * baked into the packaged app as app-update.yml.
+ *
+ * On Windows the startup update window (../splash.ts) runs first by default
+ * and installs without asking; this popup covers checks made while the
+ * launcher is open, and startup too when that window is turned off.
  */
 
 let state: UpdaterState = { status: 'idle' }
@@ -107,9 +111,13 @@ function releaseNotesToString(notes: unknown): string | undefined {
  * latest stable release. Read fresh before every check so the toggle applies
  * without a restart.
  */
-function checkForUpdates(): Promise<unknown> {
+export function configureChannel(): void {
   autoUpdater.allowPrerelease = settingsService.get().alphaBuilds
   autoUpdater.allowDowngrade = false
+}
+
+function checkForUpdates(): Promise<unknown> {
+  configureChannel()
   return autoUpdater.checkForUpdates()
 }
 
@@ -191,8 +199,11 @@ export const updaterService = {
     return state
   },
 
-  /** Wire events and run the startup check (packaged builds only). */
-  init(): void {
+  /**
+   * Wire events and run the startup check (packaged builds only).
+   * `alreadyChecked`: the startup update window just found nothing newer.
+   */
+  init({ alreadyChecked = false } = {}): void {
     if (initialized) return
     initialized = true
 
@@ -203,7 +214,7 @@ export const updaterService = {
     }
     wireEvents()
 
-    if (settingsService.get().checkLauncherUpdates) {
+    if (settingsService.get().checkLauncherUpdates && !alreadyChecked) {
       // Give startup and window paint a moment before checking.
       setTimeout(() => {
         void checkForUpdates().catch(() => {

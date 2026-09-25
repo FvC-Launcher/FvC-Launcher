@@ -322,6 +322,11 @@ export interface AppSettings {
   language: string
   launchOnStartup: boolean
   checkLauncherUpdates: boolean
+  /**
+   * Windows: check in a small window before the launcher opens and install
+   * updates right away. Off = the update popup inside the launcher.
+   */
+  updateOnStartup: boolean
   afterLaunch: 'keep' | 'minimize' | 'close'
   // Minecraft defaults (profiles can override)
   defaultRamMb: number
@@ -390,6 +395,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: 'en',
   launchOnStartup: false,
   checkLauncherUpdates: true,
+  updateOnStartup: true,
   afterLaunch: 'minimize',
   defaultRamMb: 4096,
   defaultJavaPath: '',
@@ -547,4 +553,16 @@ export interface UpdaterState {
   error?: string
   /** The offered version came from "Revert to latest release" (may be older). */
   toStable?: boolean
+}
+
+/** What the startup update window (Windows) shows. */
+export interface SplashState {
+  /** 'failed' offers Retry / Continue. */
+  phase: 'checking' | 'downloading' | 'installing' | 'launching' | 'failed'
+  /** Main status line, e.g. "Checking for updates…". */
+  status: string
+  /** Smaller second line: version, progress, or what went wrong. */
+  detail?: string
+  /** Download progress 0..100; absent = indeterminate bar. */
+  percent?: number
 }

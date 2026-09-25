@@ -124,8 +124,11 @@ A dark glass UI with real customization:
 - Icon-only sidebar, notification position and custom background image
 
 ### Updates
-The launcher checks GitHub Releases on startup and shows a consent dialog. **Nothing is ever
-installed silently.**
+On Windows the launcher starts with a small update window, like Discord's: it checks GitHub
+Releases and, when there is a new version, downloads and installs it and restarts on its own.
+Offline, it offers **Retry** or **Continue**. Turn off **Settings → Updates → Update before
+opening** to get a consent popup instead, where nothing is installed until you say so. Linux
+always uses the popup.
 
 ---
 
