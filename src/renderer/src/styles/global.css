@@ -251,6 +251,7 @@ textarea {
 
 .titlebar {
   grid-area: titlebar;
+  position: relative;
   display: flex;
   align-items: center;
   -webkit-app-region: drag;
@@ -273,6 +274,16 @@ textarea {
   height: 22px;
   border-radius: 6px;
   object-fit: contain;
+}
+
+/* Centered on the window, not between brand and controls; clicks fall
+   through so the title bar still drags from here. */
+.titlebar-version {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .titlebar .win-controls {

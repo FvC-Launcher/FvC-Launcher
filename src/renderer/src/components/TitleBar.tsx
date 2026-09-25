@@ -4,9 +4,11 @@ import logo from '@/assets/icon.png'
 
 export function TitleBar(): ReactNode {
   const [maximized, setMaximized] = useState(false)
+  const [version, setVersion] = useState('')
 
   useEffect(() => {
     void window.fvc.window.isMaximized().then(setMaximized)
+    void window.fvc.system.appVersion().then(setVersion)
     return window.fvc.window.onMaximizedChange(setMaximized)
   }, [])
 
@@ -16,6 +18,8 @@ export function TitleBar(): ReactNode {
         <img className="logo" src={logo} alt="" />
         FvC Launcher
       </div>
+      {/* Pre-releases (3.0.2-beta.…) show their exact version for bug reports. */}
+      {version.includes('-') && <span className="badge warning titlebar-version">v{version}</span>}
       <div className="win-controls">
         <button onClick={() => window.fvc.window.minimize()} aria-label="Minimize">
           <Minus size={16} />
