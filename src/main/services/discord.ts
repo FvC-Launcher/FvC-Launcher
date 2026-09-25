@@ -66,6 +66,8 @@ let lastSentAt = 0
 
 let launches: LaunchState[] = []
 let page: Page = 'home'
+/** The launcher window is closed (running in the tray). */
+let inBackground = false
 
 function enabled(): boolean {
   return CLIENT_ID !== '' && settingsService.get().discordRichPresence
@@ -76,7 +78,8 @@ function clip(text: string): string {
   return text.length > 128 ? text.slice(0, 127) + '…' : text
 }
 
-function buildActivity(): Activity {
+/** null clears the presence. */
+function buildActivity(): Activity | null {
   const base = {
     type: 0 as const,
     assets: { large_image: ICON_URL, large_text: `FvC Launcher ${app.getVersion()}` },
@@ -110,6 +113,8 @@ function buildActivity(): Activity {
     }
   }
 
+  // Idle in the tray: show nothing rather than the last page forever.
+  if (inBackground) return null
   return { ...base, status_display_type: SHOW_NAME, details: 'Idle on FvC Launcher', state: PAGE_STATUS[page] }
 }
 
@@ -128,7 +133,9 @@ function flush(): void {
   if (serialized === lastSent) return
   lastSent = serialized
   lastSentAt = Date.now()
-  write(OP_FRAME, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity }, nonce: randomUUID() })
+  // Leaving out the activity clears it.
+  const args = activity ? { pid: process.pid, activity } : { pid: process.pid }
+  write(OP_FRAME, { cmd: 'SET_ACTIVITY', args, nonce: randomUUID() })
 }
 
 function scheduleFlush(): void {
@@ -267,6 +274,12 @@ export const discordService = {
   setPage(next: Page): void {
     if (!(next in PAGE_STATUS)) return
     page = next
+    scheduleFlush()
+  },
+
+  /** The launcher window closed to the tray, or opened again. */
+  setBackground(value: boolean): void {
+    inBackground = value
     scheduleFlush()
   }
 }

@@ -321,6 +321,8 @@ export interface DownloadTask {
 export interface AppSettings {
   language: string
   launchOnStartup: boolean
+  /** Closing the window keeps the launcher running in the tray instead of quitting. */
+  runInBackground: boolean
   checkLauncherUpdates: boolean
   /**
    * Windows: check in a small window before the launcher opens and install
@@ -394,6 +396,7 @@ export const DEFAULT_MOD_BROWSER: ModBrowserPrefs = {
 export const DEFAULT_SETTINGS: AppSettings = {
   language: 'en',
   launchOnStartup: false,
+  runInBackground: true,
   checkLauncherUpdates: true,
   updateOnStartup: true,
   afterLaunch: 'minimize',

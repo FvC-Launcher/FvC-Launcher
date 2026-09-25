@@ -246,6 +246,13 @@ export function SettingsPage(): ReactNode {
               <Toggle checked={settings.launchOnStartup} onChange={(v) => set({ launchOnStartup: v })} />
             </Row>
             <Row
+              label="Keep running in the background"
+              description="Closing the window keeps FvC Launcher in the system tray, using very little memory. Turn off to quit when you close it."
+              keywords="tray close quit exit minimize memory ram"
+            >
+              <Toggle checked={settings.runInBackground} onChange={(v) => set({ runInBackground: v })} />
+            </Row>
+            <Row
               label="Discord Rich Presence"
               description="Show what you're playing on your Discord profile"
               keywords="status activity"

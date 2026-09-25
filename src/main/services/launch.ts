@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { Client } from 'minecraft-launcher-core'
@@ -245,7 +245,9 @@ export const launchService = {
           const behavior = settingsService.get().afterLaunch
           const win = BrowserWindow.getAllWindows()[0]
           if (behavior === 'minimize') win?.minimize()
-          else if (behavior === 'close') app.quit()
+          // Same as closing the window: to the tray when running in the
+          // background (playtime is still tracked), otherwise quit.
+          else if (behavior === 'close') win?.close()
         }
       })
       client.on('progress', (e: { type: string; task: number; total: number }) => {

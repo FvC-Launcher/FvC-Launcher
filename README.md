@@ -110,6 +110,9 @@ shader packs, saves, screenshots and logs, so nothing leaks between setups.
 - Tracks play time per profile
 - **Discord Rich Presence**: "Playing Minecraft 1.21.1 on FvC Launcher" while in game, "Idle on
   FvC Launcher" otherwise (can be turned off in Settings → General)
+- **Runs in the background**: closing the window keeps the launcher in the system tray, where
+  games, downloads and play time tracking carry on. On Windows it drops to a few MB of RAM
+  there (can be turned off in Settings → General)
 
 ### Download manager
 Central queue with concurrency control, progress, speed and ETA, plus pause, resume, retry,

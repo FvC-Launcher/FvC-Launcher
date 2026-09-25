@@ -9,6 +9,7 @@ import { accountsService } from './services/accounts'
 import { updaterService } from './services/updater'
 import { discordService } from './services/discord'
 import { splash } from './splash'
+import { background } from './background'
 import { CH } from '@shared/ipc'
 
 interface WindowState {
@@ -20,6 +21,10 @@ interface WindowState {
 }
 
 let windowStore: JsonStore<WindowState>
+/** The launcher window; null while running in the background. */
+let mainWindow: BrowserWindow | null = null
+/** Past the startup update window; the launcher window has opened once. */
+let started = false
 
 // Render natively on Wayland instead of falling back to XWayland, which
 // upscales a lower-res X11 buffer and looks blurry under fractional scaling
@@ -56,6 +61,12 @@ function createWindow(): BrowserWindow {
       nodeIntegration: false
     }
   })
+
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+  background.windowOpened()
 
   if (state.maximized) win.maximize()
   win.once('ready-to-show', () => win.show())
@@ -111,11 +122,28 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+/** Bring the launcher window forward, re-creating it if it's in the background. */
+function showWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
+    // Launching it again also brings it back from the background.
+    if (started) {
+      showWindow()
+      return
+    }
+    // Still in the startup update window.
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {
       if (win.isMinimized()) win.restore()
@@ -147,6 +175,9 @@ if (!gotLock) {
     }
 
     splash.closeWhenShown(createWindow())
+    started = true
+    // Closing the window from now on sends the launcher to the tray.
+    background.init(showWindow)
 
     // Keep Microsoft sessions fresh without blocking startup.
     setTimeout(() => accountsService.refreshAllInBackground(), 2500)
@@ -161,6 +192,6 @@ if (!gotLock) {
   })
 }
 
-app.on('window-all-closed', () => {
-  app.quit()
-})
+// Quit, or keep running in the tray (Settings → General). Not emitted when
+// quitting via app.quit() (tray menu, updates), so those always exit.
+app.on('window-all-closed', () => background.windowsClosed())

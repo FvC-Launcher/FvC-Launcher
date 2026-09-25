@@ -22,6 +22,7 @@ import { curseforgeService } from './services/curseforge'
 import { legalService } from './services/legal'
 import { updaterService } from './services/updater'
 import { discordService } from './services/discord'
+import { background } from './background'
 
 export function registerIpc(): void {
   // Window controls
@@ -41,11 +42,13 @@ export function registerIpc(): void {
   ipcMain.handle(CH.settingsSet, (_e, patch) => {
     const next = settingsService.set(patch)
     if ('discordRichPresence' in patch) discordService.refresh()
+    if ('runInBackground' in patch) background.refresh()
     return next
   })
   ipcMain.handle(CH.settingsReset, () => {
     const next = settingsService.reset()
     discordService.refresh()
+    background.refresh()
     return next
   })
 
