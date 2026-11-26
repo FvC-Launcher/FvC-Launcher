@@ -1,6 +1,6 @@
 {
   "name": "fvc-launcher",
-  "version": "3.0.4-beta.20261126.1",
+  "version": "3.0.4-beta.20261126.2",
   "description": "FvC Launcher — a premium, modern Minecraft launcher with Modrinth integration",
   "main": "./out/main/index.js",
   "author": "FvC",
@@ -20,6 +20,7 @@
     "start": "electron-vite preview",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:linux": "electron-vite build && electron-builder --linux",
+    "dist:linux:arm64": "electron-vite build && electron-builder --linux AppImage deb --arm64 -c.linux.artifactName='FvC-Launcher-${version}-arm64.${ext}'",
     "release:win": "electron-vite build && electron-builder --win --publish always",
     "release:linux": "electron-vite build && electron-builder --linux --publish always"
   },

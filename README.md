@@ -30,6 +30,7 @@ Isolated profiles, one-click mods, GitHub-backed modpacks and a UI that stays ou
 Download **`FvC-Launcher-Setup-<version>.exe`** from the
 [latest release](https://github.com/FvC-Launcher/FvC-Launcher/releases/latest) and run it.
 The installer lets you choose the install directory and creates a desktop shortcut.
+It installs the native build for your PC, x64 or ARM (Windows on ARM / Snapdragon).
 
 ### Linux
 
@@ -75,6 +76,20 @@ chmod +x FvC-Launcher-<version>.AppImage
 > package manager (or by downloading the new release).
 
 Native Wayland is supported and detected automatically; no flags needed.
+
+**Raspberry Pi and other ARM boards (64-bit)** — download `FvC-Launcher-<version>-arm64.deb`
+(Raspberry Pi OS, Debian, Ubuntu) or `FvC-Launcher-<version>-arm64.AppImage` instead, and install
+it the same way:
+
+```bash
+sudo apt install ./FvC-Launcher-<version>-arm64.deb
+```
+
+It needs a 64-bit OS (`uname -m` prints `aarch64`). The plain `.deb` / `.AppImage` files are x64
+only, which is why installing them on a Pi fails with an architecture error. Minecraft 1.13 and
+newer can be played; Mojang ships no ARM libraries for Linux, so the launcher fetches LWJGL's
+official ARM builds for each game version. On a Pi it also reports OpenGL 3.3 to the game
+(`MESA_GL_VERSION_OVERRIDE`), which the Pi's driver needs for modern versions.
 
 ---
 
@@ -240,6 +255,8 @@ If you upload assets by hand, a release for tag `vX.Y.Z` must contain the files 
 
 - **Windows:** `FvC-Launcher-Setup-X.Y.Z.exe`, `FvC-Launcher-Setup-X.Y.Z.exe.blockmap`, `latest.yml`
 - **Linux:** `FvC-Launcher-X.Y.Z.AppImage`, `FvC-Launcher-X.Y.Z.deb`, `latest-linux.yml`
+- **Linux arm64:** `FvC-Launcher-X.Y.Z-arm64.AppImage`, `FvC-Launcher-X.Y.Z-arm64.deb`, `latest-linux-arm64.yml`
+  (`npm run dist:linux:arm64`)
 
 </details>
 

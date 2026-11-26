@@ -12,6 +12,7 @@ import { accountStatsService } from './accountStats'
 import { settingsService } from './settings'
 import { downloadsService } from './downloads'
 import { javaArchFor, javaService, requiredJavaMajor } from './java'
+import { isLinuxArm64, prepareLinuxArm64Natives, raspberryPiGlEnv } from './linuxArmNatives'
 import { skinsService } from './skins'
 import { discordService } from './discord'
 import { randomUUID } from 'crypto'
@@ -227,7 +228,16 @@ export const launchService = {
       const ramMb = profile.ramMb || settings.defaultRamMb
       const resolution = profile.resolution ?? settings.defaultResolution
       const fullscreen = profile.fullscreen ?? settings.defaultFullscreen
+      // Linux arm64 (Raspberry Pi …): Mojang has no ARM natives for Linux.
+      const armNativeArgs: string[] = []
+      if (isLinuxArm64) {
+        setState({ detail: 'Fetching ARM libraries…' })
+        armNativeArgs.push(...(await prepareLinuxArm64Natives(profile.minecraftVersion, log)))
+        Object.assign(process.env, raspberryPiGlEnv())
+      }
+
       const javaArgs = [
+        ...armNativeArgs,
         ...GC_ARGS[settings.gcPreset],
         ...(settings.defaultJavaArgs ? settings.defaultJavaArgs.split(/\s+/).filter(Boolean) : []),
         ...(profile.javaArgs ? profile.javaArgs.split(/\s+/).filter(Boolean) : [])

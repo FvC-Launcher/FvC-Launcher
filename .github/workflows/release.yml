@@ -76,9 +76,20 @@ jobs:
           # only after BOTH platforms uploaded all their files.
           EP_DRAFT: 'true'
 
+      # Linux arm64 (Raspberry Pi and other ARM boards), cross-built on the
+      # x64 runner. Its own file names keep the x64 ones (which the AUR
+      # package downloads) unchanged; the updater reads latest-linux-arm64.yml.
+      - name: Build and upload Linux arm64 to draft release
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux AppImage deb --arm64 --publish always -c.linux.artifactName='FvC-Launcher-${version}-arm64.${ext}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: 'true'
+
   publish:
     # Runs only when every build job succeeded — then the complete release
-    # (exe + blockmap + latest.yml + AppImage + deb + latest-linux.yml)
+    # (exe + blockmap + latest.yml + AppImage + deb + latest-linux.yml,
+    # plus the arm64 AppImage + deb + latest-linux-arm64.yml)
     # becomes visible atomically.
     needs: build
     runs-on: ubuntu-latest
