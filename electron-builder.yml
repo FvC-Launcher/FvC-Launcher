@@ -28,8 +28,11 @@ files:
 
 win:
   target:
+    # One installer holds both builds and installs the one that matches the
+    # PC (native arm64 on Windows on ARM). latest.yml points at that single
+    # file, so the auto-updater needs nothing per-architecture.
     - target: nsis
-      arch: [x64]
+      arch: [x64, arm64]
   icon: build/icon.png
 
 nsis:

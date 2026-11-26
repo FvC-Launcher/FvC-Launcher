@@ -496,6 +496,7 @@ export function SettingsPage(): ReactNode {
                               {java.path}
                             </div>
                           </div>
+                          {java.arch && <span className="badge">{java.arch}</span>}
                           <span className="badge">{java.source}</span>
                           {settings.javaMode === 'manual' && !inUse && (
                             <Button variant="subtle" onClick={() => set({ defaultJavaPath: java.path })}>

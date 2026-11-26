@@ -498,8 +498,12 @@ export interface JavaInstall {
   path: string
   version: string
   majorVersion: number
+  /** CPU architecture the runtime is built for (its os.arch), when known. */
+  arch?: JavaArch
   source: 'system' | 'managed' | 'custom'
 }
+
+export type JavaArch = 'x64' | 'arm64' | 'x86'
 
 // ----------------------------------- Modpacks ------------------------------
 

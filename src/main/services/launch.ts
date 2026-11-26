@@ -11,7 +11,7 @@ import { accountsService } from './accounts'
 import { accountStatsService } from './accountStats'
 import { settingsService } from './settings'
 import { downloadsService } from './downloads'
-import { javaService, requiredJavaMajor } from './java'
+import { javaArchFor, javaService, requiredJavaMajor } from './java'
 import { skinsService } from './skins'
 import { discordService } from './discord'
 import { randomUUID } from 'crypto'
@@ -194,7 +194,10 @@ export const launchService = {
           'Java is set to Manual but no executable is configured. Pick one in Settings → Minecraft, or switch to Auto.'
         )
       } else {
-        javaPath = await javaService.ensureMajor(requiredJavaMajor(profile.minecraftVersion))
+        javaPath = await javaService.ensureMajor(
+          requiredJavaMajor(profile.minecraftVersion),
+          javaArchFor(profile.minecraftVersion)
+        )
       }
 
       // 3. Loader
